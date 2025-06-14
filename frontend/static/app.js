@@ -148,15 +148,8 @@ function updateChargerList(chargers) {
             // Set selected charger
             selectedChargerId = charger.id;
             
-            // Clear logs for fresh start when selecting a charger
-            try {
-                await fetch(`/api/logs/${selectedChargerId}/clear-on-load`, {
-                    method: 'POST'
-                });
-                console.log(`Logs cleared on charger selection: ${selectedChargerId}`);
-            } catch (error) {
-                console.error('Error clearing logs on selection:', error);
-            }
+            // Don't clear logs on charger selection - preserve logs across browser reloads
+            // Only clear logs manually or when server restarts
             
             // Start polling logs for selected charger
             if (logPollingInterval) {
@@ -1084,6 +1077,57 @@ async function sendLocalList() {
     } catch (error) {
         console.error('Error sending local list:', error);
         alert('Error sending local list');
+    }
+}
+
+async function clearLocalList() {
+    if (!selectedChargerId) {
+        alert('Please select a charger first');
+        return;
+    }
+
+    if (confirm(`Are you sure you want to clear the local authorization list on charger ${selectedChargerId}?\n\nThis will remove all locally stored ID tags from the charger.`)) {
+        try {
+            const response = await fetch(`/api/send/${selectedChargerId}/clear_local_list`, {
+                method: 'POST'
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                alert(`Clear Local List request sent successfully!\n\nResponse: ${JSON.stringify(result.response, null, 2)}\n\nThe charger's local authorization list has been cleared.`);
+            } else {
+                const error = await response.json();
+                alert(`Failed to clear local list: ${error.detail}`);
+            }
+        } catch (error) {
+            console.error('Error clearing local list:', error);
+            alert('Failed to clear local list. Please try again.');
+        }
+    }
+}
+
+async function getLocalListVersion() {
+    if (!selectedChargerId) {
+        alert('Please select a charger first');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/send/${selectedChargerId}/get_local_list_version`, {
+            method: 'GET'
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            const version = result.response.listVersion || 0;
+            alert(`Local List Version for ${selectedChargerId}:\n\nVersion: ${version}\n\n${version === 0 ? 'No local authorization list is currently stored on the charger.' : `The charger has ${version} version(s) of local authorization data.`}`);
+        } else {
+            const error = await response.json();
+            alert(`Failed to get local list version: ${error.detail}`);
+        }
+    } catch (error) {
+        console.error('Error getting local list version:', error);
+        alert('Failed to get local list version. Please try again.');
     }
 }
 
