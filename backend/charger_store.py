@@ -25,8 +25,8 @@ class ChargerStore:
                 status='Connected',
                 last_heartbeat=datetime.utcnow(),
                 data_transfer_packets={},
-                logs=[],
-                logs_cleared_at=datetime.utcnow()  # Start fresh for new chargers
+                logs=[]
+                # logs_cleared_at will be None initially - no auto-clear for new chargers
             )
             db.session.add(new_charger)
             db.session.commit()
@@ -39,10 +39,9 @@ class ChargerStore:
                 existing_charger.logs = []
             if existing_charger.data_transfer_packets is None:
                 existing_charger.data_transfer_packets = {}
-            # Set clear timestamp for existing chargers on reconnection to start fresh
-            existing_charger.logs_cleared_at = datetime.utcnow()
+            # Don't auto-clear logs on reconnection - preserve connection history
             db.session.commit()
-            logger.info(f"Updated existing charger: {charge_point_id} - logs cleared for fresh start")
+            logger.info(f"Updated existing charger: {charge_point_id} - reconnected (logs preserved)")
 
     def remove_charger(self, charge_point_id: str) -> None:
         """Remove a charger from the store."""
