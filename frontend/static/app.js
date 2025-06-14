@@ -1087,6 +1087,116 @@ async function sendLocalList() {
     }
 }
 
+function generateRandomLocalList() {
+    // Default: Generate 10 random ID tags with 1-day validity
+    generateCustomRandomList(10, 1);
+}
+
+function generateCustomRandomList(count, daysValid) {
+    // Generate specified number of random ID tags with custom validity
+    const authList = [];
+    const expiryDate = new Date();
+    expiryDate.setDate(expiryDate.getDate() + daysValid);
+    const expiryISO = expiryDate.toISOString();
+
+    for (let i = 1; i <= count; i++) {
+        // Generate random ID tag
+        const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
+        const idTag = `TEST${String(i).padStart(2, '0')}_${randomSuffix}`;
+        
+        authList.push({
+            "idTag": idTag,
+            "idTagInfo": {
+                "status": "Accepted",
+                "expiryDate": expiryISO
+            }
+        });
+    }
+
+    // Format JSON with nice indentation
+    const jsonString = JSON.stringify(authList, null, 2);
+    
+    // Insert into textarea
+    document.getElementById('localListData').value = jsonString;
+    
+    // Show confirmation and ask if user wants to add to database
+    const validityText = daysValid === 1 ? '1 day' : `${daysValid} days`;
+    const confirmationMsg = `Generated ${count} random ID tags:\n` +
+        `• Validity: ${validityText} (expires ${expiryDate.toLocaleDateString()} ${expiryDate.toLocaleTimeString()})\n` +
+        `• Status: Accepted\n` +
+        `• Format: TEST01_XXXXXX to TEST${String(count).padStart(2, '0')}_XXXXXX\n\n` +
+        `Would you like to add these tags to the ID Tags database as well?\n` +
+        `This will allow you to use them for Remote Start transactions.`;
+    
+    if (confirm(confirmationMsg)) {
+        // Add tags to database
+        addGeneratedTagsToDatabase(authList);
+    }
+}
+
+async function addGeneratedTagsToDatabase(authList) {
+    let successCount = 0;
+    let errorCount = 0;
+    
+    for (const item of authList) {
+        try {
+            const response = await fetch('/api/idtags', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    id_tag: item.idTag,
+                    status: item.idTagInfo.status,
+                    expiry_date: item.idTagInfo.expiryDate
+                })
+            });
+            
+            if (response.ok) {
+                successCount++;
+            } else {
+                errorCount++;
+                console.error(`Failed to add ${item.idTag} to database`);
+            }
+        } catch (error) {
+            errorCount++;
+            console.error(`Error adding ${item.idTag} to database:`, error);
+        }
+    }
+    
+    // Show result
+    if (errorCount === 0) {
+        alert(`✅ Success! All ${successCount} ID tags have been added to the database.\n\nYou can now:\n• Send the local list to the charger\n• Use these tags for Remote Start transactions`);
+        // Refresh ID tags list if on that tab
+        loadIdTags();
+    } else {
+        alert(`⚠️ Partial success: ${successCount} tags added, ${errorCount} failed.\n\nCheck the console for error details.`);
+    }
+}
+
+function showCustomGeneratorModal() {
+    const count = prompt('How many ID tags to generate?', '10');
+    if (count === null) return;
+    
+    const days = prompt('Validity period in days?', '1');
+    if (days === null) return;
+    
+    const tagCount = parseInt(count);
+    const dayCount = parseInt(days);
+    
+    if (isNaN(tagCount) || tagCount < 1 || tagCount > 100) {
+        alert('Please enter a valid number of tags (1-100)');
+        return;
+    }
+    
+    if (isNaN(dayCount) || dayCount < 1 || dayCount > 365) {
+        alert('Please enter a valid number of days (1-365)');
+        return;
+    }
+    
+    generateCustomRandomList(tagCount, dayCount);
+}
+
 async function sendDataTransfer() {
     // Check if a charger is selected
     if (!selectedChargerId) {
