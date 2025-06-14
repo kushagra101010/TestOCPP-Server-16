@@ -165,6 +165,7 @@ async def websocket_endpoint(websocket: WebSocket, charge_point_id: str):
         # Create charge point instance
         charge_point = ChargePoint(charge_point_id, ws_adapter)
         charge_points[charge_point_id] = charge_point
+        logger.info(f"Added {charge_point_id} to charge_points. Current connections: {list(charge_points.keys())}")
         
         # Update charger status in database
         charger = db.session.query(Charger).filter_by(charge_point_id=charge_point_id).first()
@@ -172,6 +173,7 @@ async def websocket_endpoint(websocket: WebSocket, charge_point_id: str):
             charger.status = "Connected"
             charger.last_heartbeat = datetime.utcnow()
             db.session.commit()
+            logger.info(f"Updated database status for {charge_point_id}: Connected")
         
         try:
             # Start the charge point
@@ -183,14 +185,21 @@ async def websocket_endpoint(websocket: WebSocket, charge_point_id: str):
             logger.error(traceback.format_exc())
         finally:
             # Clean up
+            logger.info(f"WebSocket cleanup for {charge_point_id}. Before cleanup: {list(charge_points.keys())}")
             if charge_point_id in charge_points:
                 del charge_points[charge_point_id]
+                logger.info(f"Removed {charge_point_id} from charge_points. After cleanup: {list(charge_points.keys())}")
             
-            # Update charger status in database
-            charger = db.session.query(Charger).filter_by(charge_point_id=charge_point_id).first()
-            if charger:
-                charger.status = "Disconnected"
-                db.session.commit()
+            # Update charger status in database only if no other WebSocket connection exists
+            # This prevents race conditions during reconnections
+            if charge_point_id not in charge_points:
+                charger = db.session.query(Charger).filter_by(charge_point_id=charge_point_id).first()
+                if charger:
+                    charger.status = "Disconnected"
+                    db.session.commit()
+                    logger.info(f"Updated database status for {charge_point_id}: Disconnected")
+            else:
+                logger.info(f"Not marking {charge_point_id} as disconnected - another WebSocket connection exists")
                 
             await ws_adapter.close()
     except Exception as e:
@@ -221,12 +230,15 @@ async def get_chargers():
     result = []
     charger_ids_in_db = set()
     
+    # Log current WebSocket connections for debugging
+    logger.info(f"Current active WebSocket connections: {list(charge_points.keys())}")
+    
     # Process chargers from database
     for charger in chargers:
         logger.debug(f"Processing charger: {charger.charge_point_id}, status: {charger.status}")
         charger_ids_in_db.add(charger.charge_point_id)
         is_ws_connected = charger.charge_point_id in charge_points
-        logger.debug(f"WebSocket connected: {is_ws_connected}, charge_points: {list(charge_points.keys())}")
+        logger.info(f"Charger {charger.charge_point_id}: WebSocket connected = {is_ws_connected}")
         
         # A charger is considered connected if it has an active WebSocket connection
         # This ensures UI shows "connected" immediately when any WebSocket packet is received
@@ -237,6 +249,7 @@ async def get_chargers():
             "connected": is_ws_connected  # Primary indicator: active WebSocket connection
         }
         result.append(charger_data)
+        logger.info(f"Charger {charger.charge_point_id} data: {charger_data}")
     
     # Also include chargers with active WebSocket connections that aren't in database yet
     for charge_point_id in charge_points:

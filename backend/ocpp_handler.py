@@ -145,6 +145,11 @@ class ChargePoint(BaseChargePoint):
         charger = db.session.query(Charger).filter_by(charge_point_id=self.charge_point_id).first()
         if charger:
             charger.last_heartbeat = datetime.utcnow()
+            # If we're receiving heartbeats, the charger is definitely connected
+            # Update status to ensure UI shows it as connected
+            if charger.status == "Disconnected":
+                charger.status = "Available"  # Default to Available if previously disconnected
+                logger.info(f"Updated {self.charge_point_id} status from Disconnected to Available due to heartbeat")
             db.session.commit()
             logger.debug(f"Updated last_heartbeat for {self.charge_point_id}")
             
