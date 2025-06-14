@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCPP 1.6J CMS</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .log-container {
+            height: 500px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            padding: 1rem;
+            border-radius: 0.25rem;
+            font-family: monospace;
+        }
+        .command-panel {
+            background-color: #f8f9fa;
+            padding: 1rem;
+            border-radius: 0.25rem;
+        }
+        .log-entry {
+            margin-bottom: 0.5rem;
+            padding: 0.25rem;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .log-timestamp {
+            color: #6c757d;
+            font-size: 0.875rem;
+            margin-bottom: 0.25rem;
+        }
+        .log-message {
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        
+        /* Custom styling for dropdown options */
+        #chargePointId option {
+            padding: 8px;
+        }
+        
+        /* Connected charger styling */
+        #chargePointId option[style*="color: rgb(40, 167, 69)"] {
+            background-color: #d4edda;
+        }
+        
+        /* Disconnected charger styling */
+        #chargePointId option[style*="color: rgb(220, 53, 69)"] {
+            background-color: #f8d7da;
+        }
+        .charger-select {
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">OCPP 1.6J CMS</span>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <!-- Tab Navigation -->
+        <ul class="nav nav-tabs" id="mainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="dashboard-tab" data-bs-toggle="tab" data-bs-target="#dashboard" type="button" role="tab">
+                    <i class="bi bi-speedometer2"></i> Dashboard
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="idtags-tab" data-bs-toggle="tab" data-bs-target="#idtags" type="button" role="tab">
+                    <i class="bi bi-credit-card"></i> ID Tags
+                </button>
+            </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content" id="mainTabContent">
+            <!-- Dashboard Tab -->
+            <div class="tab-pane fade show active" id="dashboard" role="tabpanel">
+                <div class="row mt-3">
+                    <!-- Left Panel -->
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">Chargers</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="chargerList" class="list-group">
+                                    <!-- Chargers will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">Actions</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-success" onclick="showRemoteStartModal()">Remote Start</button>
+                                    <button class="btn btn-danger" onclick="showRemoteStopModal()">Remote Stop</button>
+                                    <button class="btn btn-info" onclick="showGetConfigModal()">Get Configuration</button>
+                                    <button class="btn btn-warning" onclick="showChangeConfigModal()">Change Configuration</button>
+                                    <button class="btn btn-secondary" onclick="clearCache()">Clear Cache</button>
+                                    <button class="btn btn-primary" onclick="showSendLocalListModal()">Send Local List</button>
+                                    <button class="btn btn-outline-primary" onclick="showDataTransferModal()">Data Transfer</button>
+                                    <button class="btn btn-outline-secondary" onclick="showDataTransferPacketsModal()">Data Transfer Packets</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Panel -->
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="card-title mb-0">Charger Logs</h5>
+                                <div class="btn-group" role="group">
+                                    <button id="autoScrollBtn" class="btn btn-sm btn-outline-primary" onclick="toggleAutoScroll()">
+                                        <i class="bi bi-arrow-down-circle"></i> Auto-scroll: ON
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-success" onclick="downloadLogsCSV()">
+                                        <i class="bi bi-download"></i> Download CSV
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="clearLogs()">Clear</button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div id="logContainer" class="log-container">
+                                    <!-- Logs will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ID Tags Tab -->
+            <div class="tab-pane fade" id="idtags" role="tabpanel">
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-credit-card"></i> ID Tag Management
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <!-- Add New ID Tag Form -->
+                                <div class="card mb-4">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">Add New ID Tag</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <label class="form-label">ID Tag</label>
+                                                <input type="text" class="form-control" id="newIdTag" placeholder="Enter ID Tag">
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label class="form-label">Expiry Date & Time (Optional)</label>
+                                                <input type="datetime-local" class="form-control" id="newIdTagExpiry">
+                                            </div>
+                                            <div class="col-md-4 d-flex align-items-end">
+                                                <button class="btn btn-primary w-100" onclick="addIdTag()">
+                                                    <i class="bi bi-plus-circle"></i> Add ID Tag
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- ID Tags List -->
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">Existing ID Tags</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div id="idTagList" class="row">
+                                            <!-- ID tags will be populated here -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div class="modal fade" id="remoteStartModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Remote Start Transaction</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">ID Tag</label>
+                        <select class="form-select" id="remoteStartIdTag"></select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Connector ID (optional)</label>
+                        <input type="number" class="form-control" id="remoteStartConnectorId">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="remoteStartTransaction()">Start</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="remoteStopModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Remote Stop Transaction</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Active Transaction</label>
+                        <select class="form-select" id="remoteStopTransactionId">
+                            <option value="">No active transactions</option>
+                        </select>
+                        <small class="form-text text-muted">Select an active transaction to stop</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" onclick="remoteStopTransaction()" id="remoteStopBtn" disabled>Stop</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="getConfigModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Get Configuration</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Keys (comma-separated, optional)</label>
+                        <input type="text" class="form-control" id="getConfigKeys">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="getConfiguration()">Get</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="changeConfigModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Change Configuration</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="configurationList">
+                        <!-- Configuration keys will be populated here -->
+                    </div>
+                    <div id="noConfigurationMessage" style="display: none;">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i>
+                            Please run "Get Configuration" first to retrieve the current configuration keys and values.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="changeConfiguration()" id="changeConfigBtn">Apply Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="sendLocalListModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Send Local List</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Update Type</label>
+                        <select class="form-select" id="localListUpdateType">
+                            <option value="Full">Full</option>
+                            <option value="Differential">Differential</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Authorization List (JSON)</label>
+                        <textarea class="form-control" id="localListData" rows="5"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="sendLocalList()">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="dataTransferModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Data Transfer</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Vendor ID</label>
+                        <input type="text" class="form-control" id="dataTransferVendorId">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Message ID (optional)</label>
+                        <input type="text" class="form-control" id="dataTransferMessageId">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Data (JSON)</label>
+                        <textarea class="form-control" id="dataTransferData" rows="5"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="sendDataTransfer()">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Transfer Packets Modal -->
+    <div class="modal fade" id="dataTransferPacketsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Data Transfer Packets</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <h6>Create New Packet</h6>
+                        <div class="mb-2">
+                            <label class="form-label">Name</label>
+                            <input type="text" class="form-control" id="newPacketName" placeholder="Enter packet name">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Vendor ID</label>
+                            <input type="text" class="form-control" id="newPacketVendorId" placeholder="Enter vendor ID">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Message ID (optional)</label>
+                            <input type="text" class="form-control" id="newPacketMessageId" placeholder="Enter message ID">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Data (JSON)</label>
+                            <textarea class="form-control" id="newPacketData" rows="3" placeholder="Enter JSON data"></textarea>
+                        </div>
+                        <button class="btn btn-primary" onclick="saveDataTransferPacket()">Save Packet</button>
+                    </div>
+
+                    <div class="mt-4">
+                        <h6>Saved Packets</h6>
+                        <div id="packetsList" class="list-group">
+                            <!-- Packets will be listed here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/app.js?v=3"></script>
+</body>
+</html> 

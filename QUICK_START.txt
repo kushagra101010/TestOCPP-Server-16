@@ -1,0 +1,42 @@
+========================================
+    OCPP Server v1.6 - Quick Start
+========================================
+
+INSTALLATION (First Time Only):
+1. Double-click: setup.bat
+2. Wait for installation to complete
+
+RUNNING THE SERVER:
+1. Double-click: start_server.bat
+2. Open browser to: http://localhost:8000
+
+TESTING WITH DEMO CHARGER:
+1. Start server first (step above)
+2. Double-click: demo_charger.bat
+3. Watch the demo charger connect
+
+CONNECTING REAL CHARGERS:
+Configure your charger with:
+WebSocket URL: ws://YOUR_IP:8000/ws/CHARGER_ID
+
+Example:
+- Your IP: 192.168.1.100
+- Charger ID: STATION_001
+- URL: ws://192.168.1.100:8000/ws/STATION_001
+
+TROUBLESHOOTING:
+- If Python error: Install Python from python.org
+- If setup fails: Run as Administrator
+- If charger won't connect: Check IP address and firewall
+
+FEATURES:
+✓ Real-time charger monitoring
+✓ Remote start/stop transactions  
+✓ Configuration management
+✓ Live message logs
+✓ Web-based dashboard
+✓ Multi-charger support
+
+For detailed instructions, see README.md
+
+======================================== 
