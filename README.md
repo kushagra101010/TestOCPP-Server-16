@@ -25,14 +25,16 @@ That's it! The server will be running at `http://localhost:8000`
 - **Real-time charger monitoring** - Live status updates
 - **Remote start/stop transactions** - Control charging sessions
 - **Configuration management** - Modify charger settings remotely
+- **Hard & Soft Reset** - Remote charger restart capabilities
 - **Heartbeat monitoring** - Track charger connectivity
 - **Status notifications** - Real-time charger state changes
 - **Meter values** - Energy consumption tracking
 
 ### ✅ Web Dashboard
 - **Modern responsive UI** - Works on desktop and mobile
-- **Live logs viewer** - Real-time message monitoring
+- **Smart logs viewer** - Real-time monitoring with intelligent clearing
 - **Charger management** - Add, remove, and configure chargers
+- **Reset controls** - Hard and soft reset buttons with confirmations
 - **Transaction history** - Track all charging sessions
 - **Configuration editor** - Smart readonly/editable parameter detection
 
@@ -80,15 +82,39 @@ Open your web browser and go to:
 
 ### Managing Chargers
 1. **View connected chargers** - See all active connections
-2. **Send commands** - Start/stop transactions, get configuration
-3. **Monitor logs** - Real-time OCPP message viewer
+2. **Send commands** - Start/stop transactions, get configuration, reset chargers
+3. **Monitor logs** - Real-time OCPP message viewer with smart clearing
 4. **Configure settings** - Modify charger parameters
+5. **Reset operations** - Perform hard or soft resets remotely
 
 ### Configuration Management
 1. Click **"Get Configuration"** to retrieve all settings
 2. Click **"Change Configuration"** to modify parameters
 3. **Read-only parameters** are clearly marked and disabled
 4. **Editable parameters** can be modified and applied
+
+### Reset Operations
+The server supports both types of OCPP 1.6 reset operations:
+
+#### 🔴 Hard Reset
+- **Purpose:** Complete system restart (hardware + software)
+- **Effect:** Charger performs full reboot/power cycle
+- **Use case:** Resolve hardware issues, apply firmware updates
+- **Transaction handling:** Active sessions are stopped with "PowerLoss" reason
+
+#### 🟠 Soft Reset
+- **Purpose:** Software restart only (no power cycle)
+- **Effect:** Charger restarts application software
+- **Use case:** Apply configuration changes, resolve software issues
+- **Transaction handling:** Active sessions are stopped with "SoftReset" reason
+
+**How to use:**
+1. Select a connected charger
+2. Click **"Hard Reset"** or **"Soft Reset"** button
+3. Confirm the action in the dialog
+4. Monitor logs for reset confirmation and reconnection
+
+**Note:** Both reset types will automatically stop any active charging transactions before performing the reset.
 
 ## 🔧 File Structure
 
