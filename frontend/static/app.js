@@ -1119,8 +1119,18 @@ async function getLocalListVersion() {
 
         if (response.ok) {
             const result = await response.json();
-            const version = result.response.listVersion || 0;
-            alert(`Local List Version for ${selectedChargerId}:\n\nVersion: ${version}\n\n${version === 0 ? 'No local authorization list is currently stored on the charger.' : `The charger has ${version} version(s) of local authorization data.`}`);
+            const version = result.response.listVersion;
+            let message = `Local List Version for ${selectedChargerId}:\n\nVersion: ${version}\n\n`;
+            
+            if (version === -1) {
+                message += 'No local authorization list is currently stored on the charger.';
+            } else if (version === 0) {
+                message += 'Empty local authorization list (version 0) is stored on the charger.';
+            } else {
+                message += `The charger has version ${version} of local authorization data.`;
+            }
+            
+            alert(message);
         } else {
             const error = await response.json();
             alert(`Failed to get local list version: ${error.detail}`);

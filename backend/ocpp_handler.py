@@ -25,7 +25,7 @@ class ChargePoint(BaseChargePoint):
         # Add or update charger in database
         charger = db.session.query(Charger).filter_by(charge_point_id=id).first()
         if not charger:
-            charger = Charger(charge_point_id=id, status=ChargePointStatus.available)
+            charger = Charger(charge_point_id=id, status="Available")
             db.session.add(charger)
         db.session.commit()
         
@@ -37,7 +37,7 @@ class ChargePoint(BaseChargePoint):
         """Handle charger connection."""
         charger = db.session.query(Charger).filter_by(charge_point_id=self.charge_point_id).first()
         if charger:
-            charger.status = ChargePointStatus.available
+            charger.status = "Available"
             db.session.commit()
         logger.info(f"Charger {self.charge_point_id} connected")
 
@@ -45,7 +45,7 @@ class ChargePoint(BaseChargePoint):
         """Handle charger disconnection."""
         charger = db.session.query(Charger).filter_by(charge_point_id=self.charge_point_id).first()
         if charger:
-            charger.status = ChargePointStatus.unavailable
+            charger.status = "Disconnected"
             db.session.commit()
         logger.info(f"Charger {self.charge_point_id} disconnected")
 
@@ -56,6 +56,13 @@ class ChargePoint(BaseChargePoint):
         
         # Add charger to store
         charger_store.add_charger(self.charge_point_id)
+        
+        # Update charger status - any message means it's connected
+        charger = db.session.query(Charger).filter_by(charge_point_id=self.charge_point_id).first()
+        if charger:
+            charger.status = "Available"
+            charger.last_heartbeat = datetime.utcnow()
+            db.session.commit()
         
         # Add log entry
         print(f"DEBUG: About to add log for BootNotification")
@@ -77,6 +84,13 @@ class ChargePoint(BaseChargePoint):
     async def on_authorize(self, id_tag: str, **kwargs):
         charger_store.add_log(self.charge_point_id, f"Authorize: id_tag={id_tag}")
         logger.info(f"Received authorize request for {id_tag} from {self.charge_point_id}")
+        
+        # Update charger status - any message means it's connected
+        charger = db.session.query(Charger).filter_by(charge_point_id=self.charge_point_id).first()
+        if charger:
+            charger.status = "Available"
+            charger.last_heartbeat = datetime.utcnow()
+            db.session.commit()
         
         # Check if idTag exists in database
         id_tag_record = db.session.query(IdTag).filter_by(id_tag=id_tag).first()
@@ -104,10 +118,12 @@ class ChargePoint(BaseChargePoint):
         # Generate transaction ID (you might want to implement a better way)
         transaction_id = int(datetime.utcnow().timestamp())
         
-        # Update charger status
+        # Update charger status - any message means it's connected
         charger = db.session.query(Charger).filter_by(charge_point_id=self.charge_point_id).first()
         if charger:
+            charger.status = "Available"  # Will be updated by StatusNotification to "Charging" later
             charger.current_transaction = transaction_id
+            charger.last_heartbeat = datetime.utcnow()
             db.session.commit()
 
         return call_result.StartTransactionPayload(
@@ -123,10 +139,12 @@ class ChargePoint(BaseChargePoint):
         """Handle StopTransaction request."""
         logger.info(f"Received stop transaction request from {self.charge_point_id}")
         
-        # Update charger status
+        # Update charger status - any message means it's connected
         charger = db.session.query(Charger).filter_by(charge_point_id=self.charge_point_id).first()
         if charger:
+            charger.status = "Available"  # Back to available after stopping transaction
             charger.current_transaction = None
+            charger.last_heartbeat = datetime.utcnow()
             db.session.commit()
 
         return call_result.StopTransactionPayload(
@@ -142,11 +160,15 @@ class ChargePoint(BaseChargePoint):
         charger_store.add_log(self.charge_point_id, "Heartbeat received")
         logger.debug(f"Added heartbeat log for {self.charge_point_id}")
         
+        # Update charger status - any message means it's connected
         charger = db.session.query(Charger).filter_by(charge_point_id=self.charge_point_id).first()
         if charger:
             charger.last_heartbeat = datetime.utcnow()
+            # Update status to show charger is connected, but don't override specific states like "Charging"
+            if charger.status in ["Disconnected", "Unavailable"]:
+                charger.status = "Available"
             db.session.commit()
-            logger.debug(f"Updated last_heartbeat for {self.charge_point_id}")
+            logger.debug(f"Updated last_heartbeat and status for {self.charge_point_id}")
             
         return call_result.HeartbeatPayload(
             current_time=datetime.utcnow().isoformat()
@@ -156,9 +178,15 @@ class ChargePoint(BaseChargePoint):
     async def on_meter_values(self, connector_id: int, meter_value: list, transaction_id: int = None, **kwargs):
         try:
             charger_store.add_log(self.charge_point_id, f"MeterValues: connector={connector_id}, meter_value={meter_value}, transaction_id={transaction_id}")
+            
+            # Update charger status - any message means it's connected
             charger = db.session.query(Charger).filter_by(charge_point_id=self.charge_point_id).first()
             if charger:
+                # Don't override specific states, just ensure it's not "Disconnected"
+                if charger.status in ["Disconnected", "Unavailable"]:
+                    charger.status = "Available"
                 charger.meter_value = meter_value
+                charger.last_heartbeat = datetime.utcnow()
                 db.session.commit()
                 
             return call_result.MeterValuesPayload()
@@ -173,10 +201,11 @@ class ChargePoint(BaseChargePoint):
         charger_store.add_log(self.charge_point_id, f"StatusNotification: connector={connector_id}, error_code={error_code}, status={status}")
         logger.info(f"Status notification from {self.charge_point_id}: connector {connector_id} - {status}")
         
-        # Update charger status in database
+        # Update charger status in database - any message means it's connected
         charger = db.session.query(Charger).filter_by(charge_point_id=self.charge_point_id).first()
         if charger:
-            charger.status = status
+            charger.status = status  # Use the actual status from the notification
+            charger.last_heartbeat = datetime.utcnow()
             db.session.commit()
             
         return call_result.StatusNotificationPayload()
@@ -186,9 +215,15 @@ class ChargePoint(BaseChargePoint):
         charger_store.add_log(self.charge_point_id, f"DataTransfer: vendor_id={vendor_id}, message_id={message_id}, data={data}")
         logger.info(f"Data transfer from {self.charge_point_id}: {vendor_id} - {message_id}")
         
-        # Store data transfer packet in database
+        # Update charger status - any message means it's connected
         charger = db.session.query(Charger).filter_by(charge_point_id=self.charge_point_id).first()
         if charger:
+            # Don't override specific states, just ensure it's not "Disconnected"
+            if charger.status in ["Disconnected", "Unavailable"]:
+                charger.status = "Available"
+            charger.last_heartbeat = datetime.utcnow()
+            
+            # Store data transfer packet
             if not charger.data_transfer_packets:
                 charger.data_transfer_packets = []
             charger.data_transfer_packets.append({
