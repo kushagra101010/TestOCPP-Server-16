@@ -32,10 +32,9 @@ We are excited to announce the first official release of **OCPP Server v1.6** - 
 
 ### 🛠️ Configuration & Control Features
 - **Smart Configuration Editor** - Automatic detection of read-only vs editable parameters
-- **Bulk Configuration Changes** - Apply multiple configuration changes efficiently
-- **Local List Management** - ID tag authorization list management
-- **Reservation System** - Support for charging session reservations
-- **Firmware Management** - Update and diagnostic capabilities
+- **Configuration Management** - Change individual configuration parameters
+- **Local List Management** - Send ID tag authorization lists to chargers
+- **Cache Management** - Clear authorization cache on chargers
 
 ### 📊 Advanced Features
 - **Connection Robustness** - Improved connection status tracking and automatic reconnection
@@ -52,30 +51,32 @@ We are excited to announce the first official release of **OCPP Server v1.6** - 
 
 ## 📋 Supported OCPP 1.6 Messages
 
-### Core Profile
+### Core Profile - Incoming Messages (Charger → CMS)
 - ✅ **Authorize** - ID tag authorization
 - ✅ **BootNotification** - Charger registration and acceptance
-- ✅ **ChangeAvailability** - Connector availability management
+- ✅ **DataTransfer** - Vendor-specific data exchange
+- ✅ **Heartbeat** - Connection keep-alive
+- ✅ **MeterValues** - Energy consumption reporting
+- ✅ **StartTransaction** - Charging session start notification
+- ✅ **StatusNotification** - Charger status updates
+- ✅ **StopTransaction** - Charging session completion
+
+### Core Profile - Outgoing Commands (CMS → Charger)
 - ✅ **ChangeConfiguration** - Parameter configuration changes
 - ✅ **ClearCache** - Authorization cache clearing
 - ✅ **DataTransfer** - Vendor-specific data exchange
 - ✅ **GetConfiguration** - Parameter retrieval
-- ✅ **Heartbeat** - Connection keep-alive
-- ✅ **MeterValues** - Energy consumption reporting
 - ✅ **RemoteStartTransaction** - Remote charging session initiation
 - ✅ **RemoteStopTransaction** - Remote charging session termination
 - ✅ **Reset** - Hard and soft reset operations
-- ✅ **StartTransaction** - Charging session start notification
-- ✅ **StatusNotification** - Charger status updates
-- ✅ **StopTransaction** - Charging session completion
-- ✅ **UnlockConnector** - Connector unlock command
+- ✅ **SendLocalList** - Send ID tag authorization list
 
-### Extended Profiles
-- ✅ **Firmware Management** - GetDiagnostics, UpdateFirmware
-- ✅ **Local Auth List Management** - GetLocalListVersion, SendLocalList
-- ✅ **Remote Trigger** - TriggerMessage
-- ✅ **Reservation** - CancelReservation, ReserveNow
-- ✅ **Smart Charging** - ClearChargingProfile, GetCompositeSchedule, SetChargingProfile
+### Demo Charger Support
+- ✅ **RemoteStartTransaction** handling - Accepts remote start commands
+- ✅ **RemoteStopTransaction** handling - Accepts remote stop commands
+- ✅ **GetConfiguration** handling - Returns configuration parameters
+- ✅ **ChangeConfiguration** handling - Updates configuration values
+- ✅ **Reset** handling - Performs hard/soft resets
 
 ## 🔧 Technical Specifications
 
@@ -95,11 +96,11 @@ We are excited to announce the first official release of **OCPP Server v1.6** - 
 - **Logging:** Comprehensive JSON message logging
 
 ### Performance Characteristics
-- **Concurrent Connections:** Unlimited chargers (tested with 50+ simultaneous connections)
-- **Message Throughput:** High-performance message processing
-- **Response Time:** Sub-second OCPP message handling
-- **Memory Usage:** Optimized for low memory footprint
-- **Network Efficiency:** Minimal bandwidth usage with WebSocket persistence
+- **Concurrent Connections:** Multiple chargers supported (tested with multiple simultaneous connections)
+- **Message Throughput:** Real-time OCPP message processing
+- **Response Time:** Fast OCPP message handling
+- **Memory Usage:** Efficient for local deployment
+- **Network Efficiency:** WebSocket-based persistent connections
 
 ## 🛡️ Security & Reliability Features
 
@@ -136,17 +137,19 @@ WebSocket URL: ws://YOUR_COMPUTER_IP:8000/ws/CHARGER_ID
 
 ## ⚠️ Known Limitations
 
-- **Platform:** Primary support for Windows (Linux/Mac available on request)
+- **Platform:** Primary support for Windows (Linux/Mac versions not included)
 - **Security:** Designed for local network use (additional security needed for internet deployment)
-- **Scale:** Tested with up to 50 concurrent chargers (higher scales available with customization)
+- **OCPP Features:** Core OCPP 1.6 messages implemented, some advanced features not yet supported
+- **Scale:** Suitable for small to medium deployments (tested with multiple concurrent chargers)
 
 ## 🔮 Future Roadmap
 
 ### Planned Features
+- **Extended OCPP Messages** - Additional OCPP 1.6 message support (UnlockConnector, ChangeAvailability, etc.)
 - **User Authentication** - Multi-user access control
-- **Advanced Analytics** - Detailed reporting and statistics
-- **Mobile App** - Companion mobile application
-- **Cloud Deployment** - Scalable cloud-based deployment options
+- **Advanced Features** - Firmware management, reservations, smart charging
+- **Enhanced Analytics** - Detailed reporting and statistics
+- **Cross-Platform** - Linux and macOS support
 - **API Extensions** - Extended REST API for third-party integrations
 
 ## 🙏 Acknowledgments
