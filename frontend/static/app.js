@@ -82,32 +82,60 @@ function updateChargerList(chargers) {
             }
         }
         
-        // Get status display and charging indicator
+        // Enhanced status display with WebSocket info
         let statusDisplay = charger.connected ? (connectorStatus || 'Connected') : 'Disconnected';
         let statusClass = charger.connected ? 'bg-success' : 'bg-danger';
+        
+        // Show WebSocket-specific status
+        let wsStatusIcon = '';
+        let wsStatusText = '';
+        if (charger.websocket_active !== undefined) {
+            if (charger.websocket_active) {
+                wsStatusIcon = '<i class="bi bi-wifi text-success" title="WebSocket Active"></i> ';
+                wsStatusText = '<small class="text-success">WebSocket: Active</small><br>';
+            } else if (charger.connected) {
+                wsStatusIcon = '<i class="bi bi-wifi-off text-warning" title="WebSocket Inactive"></i> ';
+                wsStatusText = '<small class="text-warning">WebSocket: Inactive</small><br>';
+                statusClass = 'bg-warning';
+            }
+        }
         
         const isCharging = connectorStatus && ['charging', 'preparing'].includes(connectorStatus.toLowerCase());
         const chargingIndicator = isCharging ? '<i class="bi bi-lightning-charge-fill text-warning"></i> ' : '';
         const transactionInfo = isCharging ? '<br><small class="text-warning"><i class="bi bi-info-circle"></i> Active transaction</small>' : '';
         
+        // Add force reconnect button for problematic connections
+        const forceReconnectBtn = (charger.connected && !charger.websocket_active) ? 
+            `<button class="btn btn-sm btn-outline-warning me-1" onclick="forceReconnect('${charger.id}')" title="Force Reconnect">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>` : '';
+        
         item.innerHTML = `
             <div class="d-flex justify-content-between align-items-center">
                 <div>
-                    <h6 class="mb-1">${chargingIndicator}${charger.id}</h6>
-                    <small class="text-muted">Status: ${statusDisplay}</small>
-                    <br>
+                    <h6 class="mb-1">${wsStatusIcon}${chargingIndicator}${charger.id}</h6>
+                    <small class="text-muted">Status: ${statusDisplay}</small><br>
+                    ${wsStatusText}
                     <small class="text-muted">Last seen: ${charger.last_seen ? new Date(charger.last_seen).toLocaleString() : 'Never'}</small>
                     ${transactionInfo}
                 </div>
-                <span class="badge ${statusClass}">
-                    ${charger.connected ? 'Connected' : 'Disconnected'}
-                </span>
+                <div class="d-flex align-items-center">
+                    ${forceReconnectBtn}
+                    <span class="badge ${statusClass}">
+                        ${charger.connected ? 'Connected' : 'Disconnected'}
+                    </span>
+                </div>
             </div>
         `;
         
         // Allow clicking on any charger to select it
         item.addEventListener('click', async (e) => {
             e.preventDefault();
+            
+            // Don't trigger selection if clicking on force reconnect button
+            if (e.target.closest('button')) {
+                return;
+            }
             
             // Remove active class from all items
             document.querySelectorAll('#chargerList .list-group-item').forEach(el => {
@@ -1220,30 +1248,126 @@ async function deleteDataTransferPacket(packetId) {
 }
 
 function useDataTransferPacket(packetId) {
-    // Find the packet in the stored data
     const packet = packetsData.find(p => p.id === packetId);
-    if (!packet) {
-        alert('Packet not found');
+    if (packet) {
+        document.getElementById('dataTransferVendorId').value = packet.vendor_id;
+        document.getElementById('dataTransferMessageId').value = packet.message_id || '';
+        document.getElementById('dataTransferData').value = packet.data || '';
+        modals.dataTransferPackets.hide();
+        modals.dataTransfer.show();
+    }
+}
+
+// Robustness and debugging functions
+async function forceReconnect(chargerId) {
+    if (confirm(`Force disconnect charger ${chargerId}? This will force a clean reconnection.`)) {
+        try {
+            const response = await fetch(`/api/debug/force_disconnect/${chargerId}`, {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                alert(`${result.message}\n\nThe charger should reconnect automatically.`);
+                // Refresh charger list after a short delay
+                setTimeout(pollChargers, 1000);
+            } else {
+                const error = await response.json();
+                alert(`Failed to force disconnect: ${error.detail || 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error('Error forcing reconnect:', error);
+            alert('Failed to force reconnect. Please try again.');
+        }
+    }
+}
+
+async function checkConnectionHealth() {
+    if (!selectedChargerId) {
+        alert('Please select a charger first');
         return;
     }
-
-    // Fill the data transfer modal
-    document.getElementById('dataTransferVendorId').value = packet.vendor_id || '';
-    document.getElementById('dataTransferMessageId').value = packet.message_id || '';
-    document.getElementById('dataTransferData').value = packet.data || '';
-
-    // Close packets modal and open data transfer modal
-    modals.dataTransferPackets.hide();
     
-    // Small delay to ensure the first modal is closed before opening the second
-    setTimeout(() => {
-        modals.dataTransfer.show();
+    try {
+        const response = await fetch(`/api/debug/connection_health/${selectedChargerId}`);
+        const result = await response.json();
         
-        // Show a helpful message if no charger is selected
-        if (!selectedChargerId) {
-            setTimeout(() => {
-                alert('Packet loaded! Please select a charger from the dropdown first, then click Send.');
-            }, 500);
+        let message = `Connection Health Check for ${selectedChargerId}:\n\n`;
+        message += `Connected: ${result.connected}\n`;
+        if (result.websocket_alive !== undefined) {
+            message += `WebSocket Alive: ${result.websocket_alive}\n`;
         }
-    }, 300);
-} 
+        if (result.connection_object) {
+            message += `Connection Type: ${result.connection_object}\n`;
+        }
+        if (result.error) {
+            message += `Error: ${result.error}\n`;
+        }
+        
+        alert(message);
+    } catch (error) {
+        console.error('Error checking connection health:', error);
+        alert('Failed to check connection health');
+    }
+}
+
+async function cleanupStaleConnections() {
+    try {
+        const response = await fetch('/api/debug/cleanup_stale_connections', {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            alert(`${result.message}\n\nRemaining connections: ${result.remaining_connections.join(', ') || 'None'}`);
+            // Refresh charger list
+            pollChargers();
+        } else {
+            alert('Failed to cleanup stale connections');
+        }
+    } catch (error) {
+        console.error('Error cleaning up stale connections:', error);
+        alert('Failed to cleanup stale connections');
+    }
+}
+
+// Enhanced command sending with better error handling
+async function sendCommandWithRetry(commandFunc, commandName, maxRetries = 1) {
+    if (!selectedChargerId) {
+        alert('Please select a charger first');
+        return;
+    }
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            return await commandFunc();
+        } catch (error) {
+            console.error(`${commandName} attempt ${attempt + 1} failed:`, error);
+            
+            if (attempt < maxRetries) {
+                // Try cleanup before retry
+                await fetch('/api/debug/cleanup_stale_connections', { method: 'POST' });
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+                console.log(`Retrying ${commandName}...`);
+            } else {
+                throw error;
+            }
+        }
+    }
+}
+
+// Add keyboard shortcuts for debugging (Ctrl+Shift+D)
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        e.preventDefault();
+        const debugMenu = confirm('Debug Menu:\n\n' +
+            'OK - Check Connection Health\n' +
+            'Cancel - Cleanup Stale Connections');
+        
+        if (debugMenu) {
+            checkConnectionHealth();
+        } else {
+            cleanupStaleConnections();
+        }
+    }
+}); 
