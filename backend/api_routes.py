@@ -209,12 +209,6 @@ async def clear_logs(charge_point_id: str):
     charger_store.clear_logs(charge_point_id)
     return {"message": f"Logs cleared for charger {charge_point_id}"}
 
-@router.post("/api/logs/{charge_point_id}/clear-on-load")
-async def clear_logs_on_page_load(charge_point_id: str):
-    """Clear logs for a specific charger when page loads."""
-    charger_store.clear_logs(charge_point_id)
-    return {"message": f"Logs cleared on page load for charger {charge_point_id}"}
-
 @router.get("/api/chargers")
 async def get_chargers():
     """Get list of chargers from the database."""
@@ -223,23 +217,38 @@ async def get_chargers():
     chargers = db.session.query(Charger).all()
     logger.debug(f"Found {len(chargers)} chargers in database")
     
-    def is_connected(status):
-        # Consider charger connected if status is 'Available', 'Charging', 'Preparing', or 'Connected'
-        return str(status).lower() in ["available", "charging", "preparing", "connected"]
-    
-    # Also check active WebSocket connections
+    # Check active WebSocket connections - this is the primary indicator of connectivity
     result = []
+    charger_ids_in_db = set()
+    
+    # Process chargers from database
     for charger in chargers:
         logger.debug(f"Processing charger: {charger.charge_point_id}, status: {charger.status}")
+        charger_ids_in_db.add(charger.charge_point_id)
         is_ws_connected = charger.charge_point_id in charge_points
         logger.debug(f"WebSocket connected: {is_ws_connected}, charge_points: {list(charge_points.keys())}")
+        
+        # A charger is considered connected if it has an active WebSocket connection
+        # This ensures UI shows "connected" immediately when any WebSocket packet is received
         charger_data = {
             "id": charger.charge_point_id,
             "status": charger.status,
             "last_seen": charger.last_heartbeat.isoformat() if charger.last_heartbeat else None,
-            "connected": is_ws_connected or is_connected(charger.status)
+            "connected": is_ws_connected  # Primary indicator: active WebSocket connection
         }
         result.append(charger_data)
+    
+    # Also include chargers with active WebSocket connections that aren't in database yet
+    for charge_point_id in charge_points:
+        if charge_point_id not in charger_ids_in_db:
+            logger.debug(f"Found WebSocket-only charger: {charge_point_id}")
+            charger_data = {
+                "id": charge_point_id,
+                "status": "Connected",  # Default status for WebSocket-only chargers
+                "last_seen": None,
+                "connected": True  # Has active WebSocket connection
+            }
+            result.append(charger_data)
     
     logger.debug(f"Returning {len(result)} chargers")
     return {"chargers": result}

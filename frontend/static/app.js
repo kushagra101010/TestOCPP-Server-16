@@ -120,15 +120,8 @@ function updateChargerList(chargers) {
             // Set selected charger
             selectedChargerId = charger.id;
             
-            // Clear logs for fresh start when selecting a charger
-            try {
-                await fetch(`/api/logs/${selectedChargerId}/clear-on-load`, {
-                    method: 'POST'
-                });
-                console.log(`Logs cleared on charger selection: ${selectedChargerId}`);
-            } catch (error) {
-                console.error('Error clearing logs on selection:', error);
-            }
+            // Don't clear logs on charger selection - preserve logs across browser reloads
+            // Only clear logs manually or when server restarts
             
             // Start polling logs for selected charger
             if (logPollingInterval) {
