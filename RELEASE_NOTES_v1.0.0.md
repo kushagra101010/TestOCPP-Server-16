@@ -33,7 +33,7 @@ We are excited to announce the first official release of **OCPP Server v1.6** - 
 ### 🛠️ Configuration & Control Features
 - **Smart Configuration Editor** - Automatic detection of read-only vs editable parameters
 - **Configuration Management** - Change individual configuration parameters
-- **Local List Management** - Send ID tag authorization lists to chargers
+- **Local List Management** - Send ID tag authorization lists and retrieve list version
 - **Cache Management** - Clear authorization cache on chargers
 
 ### 📊 Advanced Features
@@ -66,6 +66,7 @@ We are excited to announce the first official release of **OCPP Server v1.6** - 
 - ✅ **ClearCache** - Authorization cache clearing
 - ✅ **DataTransfer** - Vendor-specific data exchange
 - ✅ **GetConfiguration** - Parameter retrieval
+- ✅ **GetLocalListVersion** - Retrieve local authorization list version
 - ✅ **RemoteStartTransaction** - Remote charging session initiation
 - ✅ **RemoteStopTransaction** - Remote charging session termination
 - ✅ **Reset** - Hard and soft reset operations
