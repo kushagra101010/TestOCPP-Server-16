@@ -47,9 +47,6 @@ class LocalListRequest(BaseModel):
 # Store active WebSocket connections
 charge_points: Dict[str, ChargePoint] = {}
 
-# Connection health tracking
-connection_health: Dict[str, dict] = {}
-
 class WebSocketAdapter:
     """Adapter to make FastAPI WebSocket compatible with ocpp library's WebSocket interface."""
     def __init__(self, websocket: WebSocket, charge_point_id: str):
@@ -212,17 +209,17 @@ async def clear_logs(charge_point_id: str):
     charger_store.clear_logs(charge_point_id)
     return {"message": f"Logs cleared for charger {charge_point_id}"}
 
+@router.post("/api/logs/{charge_point_id}/clear-on-load")
+async def clear_logs_on_page_load(charge_point_id: str):
+    """Clear logs for a specific charger when page loads."""
+    charger_store.clear_logs(charge_point_id)
+    return {"message": f"Logs cleared on page load for charger {charge_point_id}"}
+
 @router.get("/api/chargers")
 async def get_chargers():
     """Get list of chargers from the database."""
     from .database import Charger
     logger.debug("Getting chargers from database...")
-    
-    # Automatically cleanup stale connections first
-    stale_count = await cleanup_stale_connections()
-    if stale_count > 0:
-        logger.info(f"Auto-cleaned {stale_count} stale connections")
-    
     chargers = db.session.query(Charger).all()
     logger.debug(f"Found {len(chargers)} chargers in database")
     
@@ -235,28 +232,12 @@ async def get_chargers():
     for charger in chargers:
         logger.debug(f"Processing charger: {charger.charge_point_id}, status: {charger.status}")
         is_ws_connected = charger.charge_point_id in charge_points
-        
-        # Double-check WebSocket health
-        websocket_healthy = False
-        if is_ws_connected:
-            try:
-                charge_point = charge_points[charger.charge_point_id]
-                websocket_healthy = hasattr(charge_point, '_connection') and not charge_point._connection.closed
-            except Exception:
-                websocket_healthy = False
-        
-        logger.debug(f"WebSocket connected: {is_ws_connected}, healthy: {websocket_healthy}, charge_points: {list(charge_points.keys())}")
-        
-        # More accurate connection status
-        truly_connected = is_ws_connected and websocket_healthy
-        
+        logger.debug(f"WebSocket connected: {is_ws_connected}, charge_points: {list(charge_points.keys())}")
         charger_data = {
             "id": charger.charge_point_id,
             "status": charger.status,
             "last_seen": charger.last_heartbeat.isoformat() if charger.last_heartbeat else None,
-            "connected": truly_connected or is_connected(charger.status),
-            "websocket_active": truly_connected,
-            "can_send_commands": truly_connected  # Only allow commands if WebSocket is truly active
+            "connected": is_ws_connected or is_connected(charger.status)
         }
         result.append(charger_data)
     
@@ -336,50 +317,18 @@ async def clear_cache(charge_point_id: str):
 @router.post("/api/send/{charge_point_id}/reset")
 async def reset_charger(charge_point_id: str, request: ResetRequest):
     """Send Reset request."""
-    # First check if charger exists in charge_points
     if charge_point_id not in charge_points:
-        # Try cleanup and recheck
-        stale_count = await cleanup_stale_connections()
-        if stale_count > 0:
-            logger.info(f"Cleaned up {stale_count} stale connections before reset attempt")
-        
-        if charge_point_id not in charge_points:
-            raise HTTPException(status_code=404, detail=f"Charger {charge_point_id} not connected. Please ensure the charger is connected and try again.")
-    
-    # Validate WebSocket health
-    try:
-        charge_point = charge_points[charge_point_id]
-        if hasattr(charge_point, '_connection') and charge_point._connection.closed:
-            # Connection is stale, remove it
-            del charge_points[charge_point_id]
-            raise HTTPException(status_code=404, detail=f"Charger {charge_point_id} connection is stale. Please reconnect the charger and try again.")
-    except KeyError:
-        raise HTTPException(status_code=404, detail=f"Charger {charge_point_id} not found in active connections.")
+        raise HTTPException(status_code=404, detail="Charger not connected")
     
     # Validate reset type
     if request.type.lower() not in ["hard", "soft"]:
         raise HTTPException(status_code=400, detail="Reset type must be 'hard' or 'soft'")
     
     try:
-        logger.info(f"Sending {request.type} reset to {charge_point_id}")
         response = await charge_points[charge_point_id].reset(request.type)
-        logger.info(f"Reset response from {charge_point_id}: {response}")
         return {"status": "success", "response": response}
     except Exception as e:
-        logger.error(f"Reset error for {charge_point_id}: {e}")
-        # If the connection failed, clean it up
-        if charge_point_id in charge_points:
-            try:
-                del charge_points[charge_point_id]
-                # Update database status
-                from .database import Charger
-                charger = db.session.query(Charger).filter_by(charge_point_id=charge_point_id).first()
-                if charger:
-                    charger.status = "Disconnected"
-                    db.session.commit()
-            except Exception:
-                pass
-        raise HTTPException(status_code=500, detail=f"Failed to send reset command: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/api/send/{charge_point_id}/send_local_list")
 async def send_local_list(charge_point_id: str, request: LocalListRequest):
@@ -396,36 +345,6 @@ async def send_local_list(charge_point_id: str, request: LocalListRequest):
         )
         return {"status": "success", "response": response}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/api/send/{charge_point_id}/clear_local_list")
-async def clear_local_list(charge_point_id: str):
-    """Send ClearLocalList request (implemented as SendLocalList with empty list)."""
-    if charge_point_id not in charge_points:
-        raise HTTPException(status_code=404, detail="Charger not connected")
-    
-    try:
-        logger.info(f"Clearing local list for {charge_point_id}")
-        response = await charge_points[charge_point_id].clear_local_list()
-        logger.info(f"Clear local list response from {charge_point_id}: {response}")
-        return {"status": "success", "response": response}
-    except Exception as e:
-        logger.error(f"Clear local list error for {charge_point_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/api/send/{charge_point_id}/get_local_list_version")
-async def get_local_list_version(charge_point_id: str):
-    """Send GetLocalListVersion request."""
-    if charge_point_id not in charge_points:
-        raise HTTPException(status_code=404, detail="Charger not connected")
-    
-    try:
-        logger.info(f"Getting local list version for {charge_point_id}")
-        response = await charge_points[charge_point_id].get_local_list_version()
-        logger.info(f"Get local list version response from {charge_point_id}: {response}")
-        return {"status": "success", "response": response}
-    except Exception as e:
-        logger.error(f"Get local list version error for {charge_point_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/api/send/{charge_point_id}/data_transfer")
@@ -532,108 +451,4 @@ async def delete_data_transfer_packet(packet_id: int):
         raise HTTPException(status_code=404, detail="Packet not found")
     except Exception as e:
         logger.error(f"Error deleting data transfer packet: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/api/debug/active_connections")
-async def get_active_connections():
-    """Debug endpoint to see active WebSocket connections."""
-    return {
-        "active_charge_points": list(charge_points.keys()),
-        "count": len(charge_points)
-    }
-
-@router.post("/api/debug/cleanup_stale_connections")
-async def cleanup_stale_connections_endpoint():
-    """Manually trigger cleanup of stale connections."""
-    cleaned_count = await cleanup_stale_connections()
-    return {
-        "message": f"Cleaned up {cleaned_count} stale connections",
-        "cleaned_count": cleaned_count,
-        "remaining_connections": list(charge_points.keys())
-    }
-
-@router.get("/api/debug/connection_health/{charge_point_id}")
-async def check_connection_health(charge_point_id: str):
-    """Check the health of a specific connection."""
-    if charge_point_id not in charge_points:
-        return {
-            "charge_point_id": charge_point_id,
-            "connected": False,
-            "error": "Not in active connections"
-        }
-    
-    try:
-        charge_point = charge_points[charge_point_id]
-        is_alive = hasattr(charge_point, '_connection') and not charge_point._connection.closed
-        
-        return {
-            "charge_point_id": charge_point_id,
-            "connected": True,
-            "websocket_alive": is_alive,
-            "connection_object": str(type(charge_point._connection)) if hasattr(charge_point, '_connection') else "No connection object"
-        }
-    except Exception as e:
-        return {
-            "charge_point_id": charge_point_id,
-            "connected": False,
-            "error": str(e)
-        }
-
-@router.post("/api/debug/force_disconnect/{charge_point_id}")
-async def force_disconnect_charger(charge_point_id: str):
-    """Force disconnect a charger to allow clean reconnection."""
-    if charge_point_id in charge_points:
-        try:
-            charge_point = charge_points[charge_point_id]
-            if hasattr(charge_point, '_connection'):
-                await charge_point._connection.close()
-            del charge_points[charge_point_id]
-            
-            # Update database status
-            from .database import Charger
-            charger = db.session.query(Charger).filter_by(charge_point_id=charge_point_id).first()
-            if charger:
-                charger.status = "Disconnected"
-                db.session.commit()
-            
-            return {
-                "message": f"Successfully force disconnected {charge_point_id}",
-                "success": True
-            }
-        except Exception as e:
-            return {
-                "message": f"Error during force disconnect: {str(e)}",
-                "success": False
-            }
-    else:
-        return {
-            "message": f"Charger {charge_point_id} not found in active connections",
-            "success": False
-        }
-
-async def cleanup_stale_connections():
-    """Clean up stale connections that are no longer active."""
-    stale_connections = []
-    
-    for charge_point_id, charge_point in charge_points.items():
-        try:
-            # Check if WebSocket is still active
-            if hasattr(charge_point, '_connection') and charge_point._connection.closed:
-                stale_connections.append(charge_point_id)
-        except Exception:
-            stale_connections.append(charge_point_id)
-    
-    # Remove stale connections
-    for charge_point_id in stale_connections:
-        logger.warning(f"Cleaning up stale connection for {charge_point_id}")
-        if charge_point_id in charge_points:
-            del charge_points[charge_point_id]
-        
-        # Update database status
-        from .database import Charger
-        charger = db.session.query(Charger).filter_by(charge_point_id=charge_point_id).first()
-        if charger:
-            charger.status = "Disconnected"
-            db.session.commit()
-    
-    return len(stale_connections) 
+        raise HTTPException(status_code=500, detail=str(e)) 

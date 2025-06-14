@@ -115,14 +115,6 @@
                                         </button>
                                     </div>
                                     <button class="btn btn-primary" onclick="showSendLocalListModal()">Send Local List</button>
-                                    <div class="btn-group" role="group">
-                                        <button class="btn btn-outline-warning" onclick="clearLocalList()">
-                                            <i class="bi bi-trash"></i> Clear Local List
-                                        </button>
-                                        <button class="btn btn-outline-info" onclick="getLocalListVersion()">
-                                            <i class="bi bi-info-circle"></i> Get List Version
-                                        </button>
-                                    </div>
                                     <button class="btn btn-outline-primary" onclick="showDataTransferModal()">Data Transfer</button>
                                     <button class="btn btn-outline-secondary" onclick="showDataTransferPacketsModal()">Data Transfer Packets</button>
                                 </div>
@@ -323,40 +315,7 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Authorization List (JSON)</label>
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <small class="text-muted">Enter JSON array of authorization data</small>
-                            <div class="btn-group">
-                                <button type="button" class="btn btn-sm btn-outline-success" onclick="generateRandomLocalList()">
-                                    <i class="bi bi-shuffle"></i> Generate Random (10 tags, 1 day)
-                                </button>
-                                <button type="button" class="btn btn-sm btn-outline-info dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown">
-                                    <span class="visually-hidden">Toggle Dropdown</span>
-                                </button>
-                                <ul class="dropdown-menu">
-                                    <li><a class="dropdown-item" href="#" onclick="generateCustomRandomList(5, 1)">5 tags, 1 day</a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="generateCustomRandomList(10, 1)">10 tags, 1 day</a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="generateCustomRandomList(20, 1)">20 tags, 1 day</a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="#" onclick="generateCustomRandomList(10, 7)">10 tags, 1 week</a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="generateCustomRandomList(10, 30)">10 tags, 1 month</a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="#" onclick="showCustomGeneratorModal()">Custom...</a></li>
-                                </ul>
-                            </div>
-                        </div>
-                        <textarea class="form-control" id="localListData" rows="8" placeholder='Example:
-[
-  {
-    "idTag": "RFID001",
-    "idTagInfo": {
-      "status": "Accepted",
-      "expiryDate": "2024-12-31T23:59:59Z"
-    }
-  }
-]'></textarea>
-                        <small class="form-text text-muted">
-                            <strong>Tip:</strong> Use the "Generate Random" button to create test ID tags with configurable validity periods.
-                        </small>
+                        <textarea class="form-control" id="localListData" rows="5"></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">

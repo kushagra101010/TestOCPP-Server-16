@@ -82,60 +82,32 @@ function updateChargerList(chargers) {
             }
         }
         
-        // Enhanced status display with WebSocket info
+        // Get status display and charging indicator
         let statusDisplay = charger.connected ? (connectorStatus || 'Connected') : 'Disconnected';
         let statusClass = charger.connected ? 'bg-success' : 'bg-danger';
-        
-        // Show WebSocket-specific status
-        let wsStatusIcon = '';
-        let wsStatusText = '';
-        if (charger.websocket_active !== undefined) {
-            if (charger.websocket_active) {
-                wsStatusIcon = '<i class="bi bi-wifi text-success" title="WebSocket Active"></i> ';
-                wsStatusText = '<small class="text-success">WebSocket: Active</small><br>';
-            } else if (charger.connected) {
-                wsStatusIcon = '<i class="bi bi-wifi-off text-warning" title="WebSocket Inactive"></i> ';
-                wsStatusText = '<small class="text-warning">WebSocket: Inactive</small><br>';
-                statusClass = 'bg-warning';
-            }
-        }
         
         const isCharging = connectorStatus && ['charging', 'preparing'].includes(connectorStatus.toLowerCase());
         const chargingIndicator = isCharging ? '<i class="bi bi-lightning-charge-fill text-warning"></i> ' : '';
         const transactionInfo = isCharging ? '<br><small class="text-warning"><i class="bi bi-info-circle"></i> Active transaction</small>' : '';
         
-        // Add force reconnect button for problematic connections
-        const forceReconnectBtn = (charger.connected && !charger.websocket_active) ? 
-            `<button class="btn btn-sm btn-outline-warning me-1" onclick="forceReconnect('${charger.id}')" title="Force Reconnect">
-                <i class="bi bi-arrow-clockwise"></i>
-            </button>` : '';
-        
         item.innerHTML = `
             <div class="d-flex justify-content-between align-items-center">
                 <div>
-                    <h6 class="mb-1">${wsStatusIcon}${chargingIndicator}${charger.id}</h6>
-                    <small class="text-muted">Status: ${statusDisplay}</small><br>
-                    ${wsStatusText}
+                    <h6 class="mb-1">${chargingIndicator}${charger.id}</h6>
+                    <small class="text-muted">Status: ${statusDisplay}</small>
+                    <br>
                     <small class="text-muted">Last seen: ${charger.last_seen ? new Date(charger.last_seen).toLocaleString() : 'Never'}</small>
                     ${transactionInfo}
                 </div>
-                <div class="d-flex align-items-center">
-                    ${forceReconnectBtn}
-                    <span class="badge ${statusClass}">
-                        ${charger.connected ? 'Connected' : 'Disconnected'}
-                    </span>
-                </div>
+                <span class="badge ${statusClass}">
+                    ${charger.connected ? 'Connected' : 'Disconnected'}
+                </span>
             </div>
         `;
         
         // Allow clicking on any charger to select it
         item.addEventListener('click', async (e) => {
             e.preventDefault();
-            
-            // Don't trigger selection if clicking on force reconnect button
-            if (e.target.closest('button')) {
-                return;
-            }
             
             // Remove active class from all items
             document.querySelectorAll('#chargerList .list-group-item').forEach(el => {
@@ -148,8 +120,15 @@ function updateChargerList(chargers) {
             // Set selected charger
             selectedChargerId = charger.id;
             
-            // Don't clear logs on charger selection - preserve logs across browser reloads
-            // Only clear logs manually or when server restarts
+            // Clear logs for fresh start when selecting a charger
+            try {
+                await fetch(`/api/logs/${selectedChargerId}/clear-on-load`, {
+                    method: 'POST'
+                });
+                console.log(`Logs cleared on charger selection: ${selectedChargerId}`);
+            } catch (error) {
+                console.error('Error clearing logs on selection:', error);
+            }
             
             // Start polling logs for selected charger
             if (logPollingInterval) {
@@ -1080,177 +1059,6 @@ async function sendLocalList() {
     }
 }
 
-async function clearLocalList() {
-    if (!selectedChargerId) {
-        alert('Please select a charger first');
-        return;
-    }
-
-    if (confirm(`Are you sure you want to clear the local authorization list on charger ${selectedChargerId}?\n\nThis will remove all locally stored ID tags from the charger.`)) {
-        try {
-            const response = await fetch(`/api/send/${selectedChargerId}/clear_local_list`, {
-                method: 'POST'
-            });
-
-            if (response.ok) {
-                const result = await response.json();
-                alert(`Clear Local List request sent successfully!\n\nResponse: ${JSON.stringify(result.response, null, 2)}\n\nThe charger's local authorization list has been cleared.`);
-            } else {
-                const error = await response.json();
-                alert(`Failed to clear local list: ${error.detail}`);
-            }
-        } catch (error) {
-            console.error('Error clearing local list:', error);
-            alert('Failed to clear local list. Please try again.');
-        }
-    }
-}
-
-async function getLocalListVersion() {
-    if (!selectedChargerId) {
-        alert('Please select a charger first');
-        return;
-    }
-
-    try {
-        const response = await fetch(`/api/send/${selectedChargerId}/get_local_list_version`, {
-            method: 'GET'
-        });
-
-        if (response.ok) {
-            const result = await response.json();
-            const version = result.response.listVersion;
-            let message = `Local List Version for ${selectedChargerId}:\n\nVersion: ${version}\n\n`;
-            
-            if (version === -1) {
-                message += 'No local authorization list is currently stored on the charger.';
-            } else if (version === 0) {
-                message += 'Empty local authorization list (version 0) is stored on the charger.';
-            } else {
-                message += `The charger has version ${version} of local authorization data.`;
-            }
-            
-            alert(message);
-        } else {
-            const error = await response.json();
-            alert(`Failed to get local list version: ${error.detail}`);
-        }
-    } catch (error) {
-        console.error('Error getting local list version:', error);
-        alert('Failed to get local list version. Please try again.');
-    }
-}
-
-function generateRandomLocalList() {
-    // Default: Generate 10 random ID tags with 1-day validity
-    generateCustomRandomList(10, 1);
-}
-
-function generateCustomRandomList(count, daysValid) {
-    // Generate specified number of random ID tags with custom validity
-    const authList = [];
-    const expiryDate = new Date();
-    expiryDate.setDate(expiryDate.getDate() + daysValid);
-    const expiryISO = expiryDate.toISOString();
-
-    for (let i = 1; i <= count; i++) {
-        // Generate random ID tag
-        const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
-        const idTag = `TEST${String(i).padStart(2, '0')}_${randomSuffix}`;
-        
-        authList.push({
-            "idTag": idTag,
-            "idTagInfo": {
-                "status": "Accepted",
-                "expiryDate": expiryISO
-            }
-        });
-    }
-
-    // Format JSON with nice indentation
-    const jsonString = JSON.stringify(authList, null, 2);
-    
-    // Insert into textarea
-    document.getElementById('localListData').value = jsonString;
-    
-    // Show confirmation and ask if user wants to add to database
-    const validityText = daysValid === 1 ? '1 day' : `${daysValid} days`;
-    const confirmationMsg = `Generated ${count} random ID tags:\n` +
-        `• Validity: ${validityText} (expires ${expiryDate.toLocaleDateString()} ${expiryDate.toLocaleTimeString()})\n` +
-        `• Status: Accepted\n` +
-        `• Format: TEST01_XXXXXX to TEST${String(count).padStart(2, '0')}_XXXXXX\n\n` +
-        `Would you like to add these tags to the ID Tags database as well?\n` +
-        `This will allow you to use them for Remote Start transactions.`;
-    
-    if (confirm(confirmationMsg)) {
-        // Add tags to database
-        addGeneratedTagsToDatabase(authList);
-    }
-}
-
-async function addGeneratedTagsToDatabase(authList) {
-    let successCount = 0;
-    let errorCount = 0;
-    
-    for (const item of authList) {
-        try {
-            const response = await fetch('/api/idtags', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    id_tag: item.idTag,
-                    status: item.idTagInfo.status,
-                    expiry_date: item.idTagInfo.expiryDate
-                })
-            });
-            
-            if (response.ok) {
-                successCount++;
-            } else {
-                errorCount++;
-                console.error(`Failed to add ${item.idTag} to database`);
-            }
-        } catch (error) {
-            errorCount++;
-            console.error(`Error adding ${item.idTag} to database:`, error);
-        }
-    }
-    
-    // Show result
-    if (errorCount === 0) {
-        alert(`✅ Success! All ${successCount} ID tags have been added to the database.\n\nYou can now:\n• Send the local list to the charger\n• Use these tags for Remote Start transactions`);
-        // Refresh ID tags list if on that tab
-        loadIdTags();
-    } else {
-        alert(`⚠️ Partial success: ${successCount} tags added, ${errorCount} failed.\n\nCheck the console for error details.`);
-    }
-}
-
-function showCustomGeneratorModal() {
-    const count = prompt('How many ID tags to generate?', '10');
-    if (count === null) return;
-    
-    const days = prompt('Validity period in days?', '1');
-    if (days === null) return;
-    
-    const tagCount = parseInt(count);
-    const dayCount = parseInt(days);
-    
-    if (isNaN(tagCount) || tagCount < 1 || tagCount > 100) {
-        alert('Please enter a valid number of tags (1-100)');
-        return;
-    }
-    
-    if (isNaN(dayCount) || dayCount < 1 || dayCount > 365) {
-        alert('Please enter a valid number of days (1-365)');
-        return;
-    }
-    
-    generateCustomRandomList(tagCount, dayCount);
-}
-
 async function sendDataTransfer() {
     // Check if a charger is selected
     if (!selectedChargerId) {
@@ -1412,126 +1220,30 @@ async function deleteDataTransferPacket(packetId) {
 }
 
 function useDataTransferPacket(packetId) {
+    // Find the packet in the stored data
     const packet = packetsData.find(p => p.id === packetId);
-    if (packet) {
-        document.getElementById('dataTransferVendorId').value = packet.vendor_id;
-        document.getElementById('dataTransferMessageId').value = packet.message_id || '';
-        document.getElementById('dataTransferData').value = packet.data || '';
-        modals.dataTransferPackets.hide();
+    if (!packet) {
+        alert('Packet not found');
+        return;
+    }
+
+    // Fill the data transfer modal
+    document.getElementById('dataTransferVendorId').value = packet.vendor_id || '';
+    document.getElementById('dataTransferMessageId').value = packet.message_id || '';
+    document.getElementById('dataTransferData').value = packet.data || '';
+
+    // Close packets modal and open data transfer modal
+    modals.dataTransferPackets.hide();
+    
+    // Small delay to ensure the first modal is closed before opening the second
+    setTimeout(() => {
         modals.dataTransfer.show();
-    }
-}
-
-// Robustness and debugging functions
-async function forceReconnect(chargerId) {
-    if (confirm(`Force disconnect charger ${chargerId}? This will force a clean reconnection.`)) {
-        try {
-            const response = await fetch(`/api/debug/force_disconnect/${chargerId}`, {
-                method: 'POST'
-            });
-            
-            if (response.ok) {
-                const result = await response.json();
-                alert(`${result.message}\n\nThe charger should reconnect automatically.`);
-                // Refresh charger list after a short delay
-                setTimeout(pollChargers, 1000);
-            } else {
-                const error = await response.json();
-                alert(`Failed to force disconnect: ${error.detail || 'Unknown error'}`);
-            }
-        } catch (error) {
-            console.error('Error forcing reconnect:', error);
-            alert('Failed to force reconnect. Please try again.');
-        }
-    }
-}
-
-async function checkConnectionHealth() {
-    if (!selectedChargerId) {
-        alert('Please select a charger first');
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/api/debug/connection_health/${selectedChargerId}`);
-        const result = await response.json();
         
-        let message = `Connection Health Check for ${selectedChargerId}:\n\n`;
-        message += `Connected: ${result.connected}\n`;
-        if (result.websocket_alive !== undefined) {
-            message += `WebSocket Alive: ${result.websocket_alive}\n`;
+        // Show a helpful message if no charger is selected
+        if (!selectedChargerId) {
+            setTimeout(() => {
+                alert('Packet loaded! Please select a charger from the dropdown first, then click Send.');
+            }, 500);
         }
-        if (result.connection_object) {
-            message += `Connection Type: ${result.connection_object}\n`;
-        }
-        if (result.error) {
-            message += `Error: ${result.error}\n`;
-        }
-        
-        alert(message);
-    } catch (error) {
-        console.error('Error checking connection health:', error);
-        alert('Failed to check connection health');
-    }
-}
-
-async function cleanupStaleConnections() {
-    try {
-        const response = await fetch('/api/debug/cleanup_stale_connections', {
-            method: 'POST'
-        });
-        
-        if (response.ok) {
-            const result = await response.json();
-            alert(`${result.message}\n\nRemaining connections: ${result.remaining_connections.join(', ') || 'None'}`);
-            // Refresh charger list
-            pollChargers();
-        } else {
-            alert('Failed to cleanup stale connections');
-        }
-    } catch (error) {
-        console.error('Error cleaning up stale connections:', error);
-        alert('Failed to cleanup stale connections');
-    }
-}
-
-// Enhanced command sending with better error handling
-async function sendCommandWithRetry(commandFunc, commandName, maxRetries = 1) {
-    if (!selectedChargerId) {
-        alert('Please select a charger first');
-        return;
-    }
-    
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        try {
-            return await commandFunc();
-        } catch (error) {
-            console.error(`${commandName} attempt ${attempt + 1} failed:`, error);
-            
-            if (attempt < maxRetries) {
-                // Try cleanup before retry
-                await fetch('/api/debug/cleanup_stale_connections', { method: 'POST' });
-                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-                console.log(`Retrying ${commandName}...`);
-            } else {
-                throw error;
-            }
-        }
-    }
-}
-
-// Add keyboard shortcuts for debugging (Ctrl+Shift+D)
-document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-        e.preventDefault();
-        const debugMenu = confirm('Debug Menu:\n\n' +
-            'OK - Check Connection Health\n' +
-            'Cancel - Cleanup Stale Connections');
-        
-        if (debugMenu) {
-            checkConnectionHealth();
-        } else {
-            cleanupStaleConnections();
-        }
-    }
-}); 
+    }, 300);
+} 
