@@ -28,7 +28,7 @@ All notable changes to OCPP Server v1.6 will be documented in this file.
 - **Configuration System**
   - Smart configuration editor
   - Read-only parameter detection
-  - Individual configuration changes
+  - Bulk configuration changes
   - Real-time validation
 
 - **Demo Features**
@@ -51,24 +51,29 @@ All notable changes to OCPP Server v1.6 will be documented in this file.
 - Virtual environment isolation
 
 #### 📋 Supported OCPP Messages
-
-- **Core Profile - Incoming Messages (Charger → CMS):**
-  - Authorize, BootNotification, DataTransfer
-  - Heartbeat, MeterValues, StartTransaction
-  - StatusNotification, StopTransaction
-
-- **Core Profile - Outgoing Commands (CMS → Charger):**
+- **Core Profile:**
+  - Authorize, BootNotification, ChangeAvailability
   - ChangeConfiguration, ClearCache, DataTransfer
-  - GetConfiguration, GetLocalListVersion
+  - GetConfiguration, Heartbeat, MeterValues
   - RemoteStartTransaction, RemoteStopTransaction
-  - Reset, SendLocalList
+  - Reset, StartTransaction, StatusNotification
+  - StopTransaction, UnlockConnector
 
-- **Demo Charger Support:**
-  - RemoteStartTransaction handling
-  - RemoteStopTransaction handling  
-  - GetConfiguration handling
-  - ChangeConfiguration handling
-  - Reset handling
+- **Firmware Management:**
+  - GetDiagnostics, UpdateFirmware
+
+- **Local Auth List Management:**
+  - GetLocalListVersion, SendLocalList
+
+- **Remote Trigger:**
+  - TriggerMessage
+
+- **Reservation:**
+  - CancelReservation, ReserveNow
+
+- **Smart Charging:**
+  - ClearChargingProfile, GetCompositeSchedule
+  - SetChargingProfile
 
 #### 🛠️ System Requirements
 - Windows 10/11
@@ -82,17 +87,14 @@ All notable changes to OCPP Server v1.6 will be documented in this file.
 ## Future Releases
 
 ### Planned Features
-- [ ] **Extended OCPP Messages** - ChangeAvailability, UnlockConnector, TriggerMessage
-- [ ] **Firmware Management** - GetDiagnostics, UpdateFirmware
-- [ ] **Reservation System** - CancelReservation, ReserveNow
-- [ ] **Smart Charging** - ClearChargingProfile, GetCompositeSchedule, SetChargingProfile
-- [ ] **Database persistence improvements**
-- [ ] **User authentication system**
-- [ ] **Advanced reporting and analytics**
-- [ ] **Cross-platform support** - Linux and macOS versions
-- [ ] **Mobile app support**
-- [ ] **Cloud deployment options**
-- [ ] **Advanced security features**
+- [ ] Database persistence improvements
+- [ ] User authentication system
+- [ ] Advanced reporting and analytics
+- [ ] Email notifications
+- [ ] Mobile app support
+- [ ] Cloud deployment options
+- [ ] Load balancing for multiple servers
+- [ ] Advanced security features
 
 ### Known Issues
 - None reported in initial release

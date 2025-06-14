@@ -115,6 +115,14 @@
                                         </button>
                                     </div>
                                     <button class="btn btn-primary" onclick="showSendLocalListModal()">Send Local List</button>
+                                    <div class="btn-group" role="group">
+                                        <button class="btn btn-outline-warning" onclick="clearLocalList()">
+                                            <i class="bi bi-trash"></i> Clear Local List
+                                        </button>
+                                        <button class="btn btn-outline-info" onclick="getLocalListVersion()">
+                                            <i class="bi bi-info-circle"></i> Get List Version
+                                        </button>
+                                    </div>
                                     <button class="btn btn-outline-primary" onclick="showDataTransferModal()">Data Transfer</button>
                                     <button class="btn btn-outline-secondary" onclick="showDataTransferPacketsModal()">Data Transfer Packets</button>
                                 </div>
@@ -319,6 +327,16 @@
                     </div>
                 </div>
                 <div class="modal-footer">
+                    <div class="btn-group dropup" role="group">
+                        <button type="button" class="btn btn-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-shuffle"></i> Generate Random List
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#" onclick="generateCustomRandomList(5, 1)">5 Tags (1 day validity)</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="generateCustomRandomList(10, 1)">10 Tags (1 day validity)</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="generateCustomRandomList(20, 1)">20 Tags (1 day validity)</a></li>
+                        </ul>
+                    </div>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-primary" onclick="sendLocalList()">Send</button>
                 </div>

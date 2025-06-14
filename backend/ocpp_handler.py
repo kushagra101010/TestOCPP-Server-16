@@ -247,6 +247,23 @@ class ChargePoint(BaseChargePoint):
             local_authorization_list=local_authorization_list
         ))
 
+    async def clear_local_list(self):
+        """Clear the local authorization list on the charge point."""
+        logger.info(f"Clearing local list for {self.charge_point_id}")
+        # Clear local list by sending an empty list with version 0
+        request = call.SendLocalListPayload(
+            list_version=0,
+            update_type="Full",
+            local_authorization_list=[]
+        )
+        return await self.call(request)
+
+    async def get_local_list_version(self):
+        """Get the current local list version from the charge point."""
+        logger.info(f"Getting local list version for {self.charge_point_id}")
+        request = call.GetLocalListVersionPayload()
+        return await self.call(request)
+
     async def data_transfer(self, vendor_id: str, message_id: str = None, data: str = None):
         """Send DataTransfer request."""
         logger.info(f"Sending data transfer to {self.charge_point_id}")

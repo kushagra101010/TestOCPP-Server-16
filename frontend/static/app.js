@@ -1246,4 +1246,105 @@ function useDataTransferPacket(packetId) {
             }, 500);
         }
     }, 300);
+}
+
+async function clearLocalList() {
+    if (!selectedChargerId) {
+        alert('Please select a charger first');
+        return;
+    }
+
+    if (confirm(`Are you sure you want to clear the local authorization list on charger ${selectedChargerId}?\n\nThis will remove all locally stored ID tags from the charger.`)) {
+        try {
+            const response = await fetch(`/api/send/${selectedChargerId}/clear_local_list`, {
+                method: 'POST'
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                alert(`Clear Local List request sent successfully!\n\nResponse: ${JSON.stringify(result.response, null, 2)}\n\nThe charger's local authorization list has been cleared.`);
+            } else {
+                const error = await response.json();
+                alert(`Failed to clear local list: ${error.detail}`);
+            }
+        } catch (error) {
+            console.error('Error clearing local list:', error);
+            alert('Failed to clear local list. Please try again.');
+        }
+    }
+}
+
+async function getLocalListVersion() {
+    if (!selectedChargerId) {
+        alert('Please select a charger first');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/send/${selectedChargerId}/get_local_list_version`, {
+            method: 'GET'
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            const version = result.response.listVersion;
+            
+            let message;
+            if (version === -1) {
+                message = `Local List Version for ${selectedChargerId}:\n\nVersion: ${version}\n\nNo local authorization list is currently stored on the charger (version -1 indicates no list available).`;
+            } else if (version === 0) {
+                message = `Local List Version for ${selectedChargerId}:\n\nVersion: ${version}\n\nLocal authorization list is cleared or empty.`;
+            } else {
+                message = `Local List Version for ${selectedChargerId}:\n\nVersion: ${version}\n\nThe charger has version ${version} of local authorization data.`;
+            }
+            
+            alert(message);
+        } else {
+            const error = await response.json();
+            alert(`Failed to get local list version: ${error.detail}`);
+        }
+    } catch (error) {
+        console.error('Error getting local list version:', error);
+        alert('Failed to get local list version. Please try again.');
+    }
+}
+
+function generateRandomLocalList() {
+    // Default: Generate 10 random ID tags with 1-day validity (backward compatibility)
+    generateCustomRandomList(10, 1);
+}
+
+function generateCustomRandomList(count = 10, validityDays = 1) {
+    const tags = [];
+    const now = new Date();
+    const expiryDate = new Date(now.getTime() + (validityDays * 24 * 60 * 60 * 1000));
+    
+    for (let i = 0; i < count; i++) {
+        // Generate random ID tag (mix of letters and numbers)
+        const randomId = 'TAG' + Math.random().toString(36).substring(2, 8).toUpperCase() + 
+                         Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+        
+        tags.push({
+            idTag: randomId,
+            idTagInfo: {
+                status: "Accepted",
+                expiryDate: expiryDate.toISOString()
+            }
+        });
+    }
+    
+    // Update the local list textarea
+    const localListTextarea = document.getElementById('localListData');
+    if (localListTextarea) {
+        localListTextarea.value = JSON.stringify(tags, null, 2);
+        
+        // Show success message
+        alert(`Generated ${count} random ID tags with ${validityDays} day validity!\n\nTags are now loaded in the Send Local List dialog. You can review and modify them before sending.\n\nGenerated tags: ${tags.map(t => t.idTag).join(', ')}`);
+        
+        // Also log to console for debugging
+        console.log('Generated random local list:', tags);
+    } else {
+        console.error('Local list textarea not found');
+        alert('Error: Could not find the local list input field.');
+    }
 } 

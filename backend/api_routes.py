@@ -347,6 +347,36 @@ async def send_local_list(charge_point_id: str, request: LocalListRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/api/send/{charge_point_id}/clear_local_list")
+async def clear_local_list(charge_point_id: str):
+    """Send ClearLocalList request (implemented as SendLocalList with empty list)."""
+    if charge_point_id not in charge_points:
+        raise HTTPException(status_code=404, detail="Charger not connected")
+    
+    try:
+        logger.info(f"Clearing local list for {charge_point_id}")
+        response = await charge_points[charge_point_id].clear_local_list()
+        logger.info(f"Clear local list response from {charge_point_id}: {response}")
+        return {"status": "success", "response": response}
+    except Exception as e:
+        logger.error(f"Clear local list error for {charge_point_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/send/{charge_point_id}/get_local_list_version")
+async def get_local_list_version(charge_point_id: str):
+    """Send GetLocalListVersion request."""
+    if charge_point_id not in charge_points:
+        raise HTTPException(status_code=404, detail="Charger not connected")
+    
+    try:
+        logger.info(f"Getting local list version for {charge_point_id}")
+        response = await charge_points[charge_point_id].get_local_list_version()
+        logger.info(f"Get local list version response from {charge_point_id}: {response}")
+        return {"status": "success", "response": response}
+    except Exception as e:
+        logger.error(f"Get local list version error for {charge_point_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/api/send/{charge_point_id}/data_transfer")
 async def data_transfer(charge_point_id: str, request: DataTransferRequest):
     """Send DataTransfer request."""
