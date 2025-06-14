@@ -281,6 +281,51 @@ class ChargePoint(cp):
         # In a real implementation, you'd validate the value and update internal settings
         return call_result.ChangeConfigurationPayload(status="Accepted")
 
+    # Handle Reset request from CMS
+    @on(Action.Reset)
+    async def on_reset(self, type, **kwargs):
+        """Handle Reset request from CMS"""
+        logger.info(f"🔄 Received Reset request - Type: {type}")
+        
+        try:
+            if type.lower() == "hard":
+                logger.info("⚡ Performing HARD RESET - Simulating complete restart...")
+                # In a real charger, this would trigger a hardware reset/reboot
+                
+                # Stop any active transaction first
+                if self.charging and self.current_transaction_id:
+                    logger.info("🛑 Stopping active transaction before reset...")
+                    await self.send_stop_transaction(1, reason="PowerLoss")
+                
+                # Simulate reset delay
+                await asyncio.sleep(2)
+                logger.info("💀 Hard reset completed - charger would restart now")
+                
+            elif type.lower() == "soft":
+                logger.info("🔄 Performing SOFT RESET - Restarting software...")
+                # In a real charger, this would restart the software without power cycle
+                
+                # Stop any active transaction first
+                if self.charging and self.current_transaction_id:
+                    logger.info("🛑 Stopping active transaction before reset...")
+                    await self.send_stop_transaction(1, reason="SoftReset")
+                
+                # Reset internal state
+                self.current_transaction_id = None
+                self.charging = False
+                self.authorized_tags.clear()
+                
+                # Simulate restart
+                await asyncio.sleep(1)
+                await self.send_status_notification(1, ChargePointStatus.available)
+                logger.info("✅ Soft reset completed - charger software restarted")
+            
+            return call_result.ResetPayload(status="Accepted")
+            
+        except Exception as e:
+            logger.error(f"❌ Error during reset: {e}")
+            return call_result.ResetPayload(status="Rejected")
+
     async def _handle_remote_start_async(self, connector_id: int, id_tag: str):
         """Handle the actual remote start process asynchronously"""
         try:

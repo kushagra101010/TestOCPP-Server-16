@@ -106,6 +106,14 @@
                                     <button class="btn btn-info" onclick="showGetConfigModal()">Get Configuration</button>
                                     <button class="btn btn-warning" onclick="showChangeConfigModal()">Change Configuration</button>
                                     <button class="btn btn-secondary" onclick="clearCache()">Clear Cache</button>
+                                    <div class="btn-group w-100" role="group">
+                                        <button class="btn btn-outline-danger" onclick="resetCharger('soft')">
+                                            <i class="bi bi-arrow-clockwise"></i> Soft Reset
+                                        </button>
+                                        <button class="btn btn-danger" onclick="resetCharger('hard')">
+                                            <i class="bi bi-power"></i> Hard Reset
+                                        </button>
+                                    </div>
                                     <button class="btn btn-primary" onclick="showSendLocalListModal()">Send Local List</button>
                                     <button class="btn btn-outline-primary" onclick="showDataTransferModal()">Data Transfer</button>
                                     <button class="btn btn-outline-secondary" onclick="showDataTransferPacketsModal()">Data Transfer Packets</button>

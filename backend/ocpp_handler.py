@@ -254,4 +254,20 @@ class ChargePoint(BaseChargePoint):
             vendor_id=vendor_id,
             message_id=message_id,
             data=data
-        )) 
+        ))
+
+    async def reset(self, type: str):
+        """Send Reset request to charger."""
+        from ocpp.v16.enums import ResetType
+        
+        # Validate reset type
+        if type.lower() == "hard":
+            reset_type = ResetType.hard
+        elif type.lower() == "soft":
+            reset_type = ResetType.soft
+        else:
+            raise ValueError("Reset type must be 'hard' or 'soft'")
+        
+        charger_store.add_log(self.charge_point_id, f"Sending Reset request: type={type}")
+        logger.info(f"Sending {type} reset to {self.charge_point_id}")
+        return await self.call(call.ResetPayload(type=reset_type)) 

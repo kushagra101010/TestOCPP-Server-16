@@ -281,6 +281,9 @@ class ChangeConfigurationRequest(BaseModel):
     key: str
     value: str
 
+class ResetRequest(BaseModel):
+    type: str  # "hard" or "soft"
+
 @router.post("/api/send/{charge_point_id}/change_configuration")
 async def change_configuration(charge_point_id: str, request: ChangeConfigurationRequest):
     """Send ChangeConfiguration request."""
@@ -301,6 +304,22 @@ async def clear_cache(charge_point_id: str):
     
     try:
         response = await charge_points[charge_point_id].clear_cache()
+        return {"status": "success", "response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/send/{charge_point_id}/reset")
+async def reset_charger(charge_point_id: str, request: ResetRequest):
+    """Send Reset request."""
+    if charge_point_id not in charge_points:
+        raise HTTPException(status_code=404, detail="Charger not connected")
+    
+    # Validate reset type
+    if request.type.lower() not in ["hard", "soft"]:
+        raise HTTPException(status_code=400, detail="Reset type must be 'hard' or 'soft'")
+    
+    try:
+        response = await charge_points[charge_point_id].reset(request.type)
         return {"status": "success", "response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

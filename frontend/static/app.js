@@ -984,6 +984,43 @@ async function clearCache() {
     }
 }
 
+async function resetCharger(resetType) {
+    if (!selectedChargerId) {
+        alert('Please select a charger first');
+        return;
+    }
+
+    const resetTypeDisplay = resetType === 'hard' ? 'Hard Reset' : 'Soft Reset';
+    const resetDescription = resetType === 'hard' 
+        ? 'This will completely restart the charger (power cycle).' 
+        : 'This will restart the charger software without power cycle.';
+
+    if (confirm(`Are you sure you want to perform a ${resetTypeDisplay} on charger ${selectedChargerId}?\n\n${resetDescription}\n\nThe charger may disconnect temporarily.`)) {
+        try {
+            const response = await fetch(`/api/send/${selectedChargerId}/reset`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    type: resetType
+                })
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                alert(`${resetTypeDisplay} request sent successfully!\nResponse: ${JSON.stringify(result.response, null, 2)}\n\nThe charger should restart shortly.`);
+            } else {
+                const error = await response.json();
+                alert(`Failed to send ${resetTypeDisplay} request: ${error.detail}`);
+            }
+        } catch (error) {
+            console.error(`Error sending ${resetTypeDisplay} request:`, error);
+            alert(`Failed to send ${resetTypeDisplay} request. Please try again.`);
+        }
+    }
+}
+
 async function sendLocalList() {
     const updateType = document.getElementById('localListUpdateType').value;
     const data = document.getElementById('localListData').value;
