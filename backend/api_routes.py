@@ -203,6 +203,12 @@ async def get_logs(charge_point_id: str):
     """Get logs for a specific charger."""
     return charger_store.get_logs(charge_point_id)
 
+@router.post("/api/logs/{charge_point_id}/clear")
+async def clear_logs(charge_point_id: str):
+    """Clear logs for a specific charger."""
+    charger_store.clear_logs(charge_point_id)
+    return {"message": f"Logs cleared for charger {charge_point_id}"}
+
 @router.get("/api/chargers")
 async def get_chargers():
     """Get list of chargers from the database."""

@@ -25,7 +25,8 @@ class ChargerStore:
                 status='Connected',
                 last_heartbeat=datetime.utcnow(),
                 data_transfer_packets={},
-                logs=[]
+                logs=[],
+                logs_cleared_at=datetime.utcnow()  # Start fresh for new chargers
             )
             db.session.add(new_charger)
             db.session.commit()
@@ -38,8 +39,10 @@ class ChargerStore:
                 existing_charger.logs = []
             if existing_charger.data_transfer_packets is None:
                 existing_charger.data_transfer_packets = {}
+            # Set clear timestamp for existing chargers on reconnection to start fresh
+            existing_charger.logs_cleared_at = datetime.utcnow()
             db.session.commit()
-            logger.info(f"Updated existing charger: {charge_point_id}")
+            logger.info(f"Updated existing charger: {charge_point_id} - logs cleared for fresh start")
 
     def remove_charger(self, charge_point_id: str) -> None:
         """Remove a charger from the store."""
@@ -84,9 +87,35 @@ class ChargerStore:
             db.session.rollback()
 
     def get_logs(self, charge_point_id: str) -> List[dict]:
-        """Get logs for a charger."""
+        """Get logs for a charger, filtered by clear timestamp."""
         charger = db.session.query(Charger).filter_by(charge_point_id=charge_point_id).first()
-        return charger.logs if charger and charger.logs else []
+        if not charger or not charger.logs:
+            return []
+        
+        # If logs were cleared, only return logs after the clear timestamp
+        if charger.logs_cleared_at:
+            clear_timestamp = charger.logs_cleared_at.isoformat()
+            filtered_logs = []
+            for log in charger.logs:
+                if log.get('timestamp', '') > clear_timestamp:
+                    filtered_logs.append(log)
+            return filtered_logs
+        
+        return charger.logs
+
+    def clear_logs(self, charge_point_id: str) -> None:
+        """Clear logs for a charger by setting the clear timestamp."""
+        try:
+            charger = db.session.query(Charger).filter_by(charge_point_id=charge_point_id).first()
+            if charger:
+                charger.logs_cleared_at = datetime.utcnow()
+                db.session.commit()
+                logger.info(f"Cleared logs for charger: {charge_point_id}")
+            else:
+                logger.warning(f"Charger {charge_point_id} not found when trying to clear logs")
+        except Exception as e:
+            logger.error(f"Error clearing logs for {charge_point_id}: {e}")
+            db.session.rollback()
 
     def add_id_tag(self, id_tag: str, status: str = "Accepted", expiry_date=None) -> None:
         """Add or update an idTag."""

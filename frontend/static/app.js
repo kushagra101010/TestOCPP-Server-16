@@ -214,8 +214,39 @@ function displayLogs(logs) {
 }
 
 // Clear logs
-function clearLogs() {
-    document.getElementById('logContainer').innerHTML = '';
+async function clearLogs() {
+    if (!selectedChargerId) {
+        alert('Please select a charger first');
+        return;
+    }
+    
+    if (confirm(`Are you sure you want to clear logs for charger ${selectedChargerId}? This will hide all previous logs.`)) {
+        try {
+            const response = await fetch(`/api/logs/${selectedChargerId}/clear`, {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                // Clear the UI immediately
+                document.getElementById('logContainer').innerHTML = '';
+                currentLogs = [];
+                
+                // Show success message
+                const container = document.getElementById('logContainer');
+                const successMsg = document.createElement('div');
+                successMsg.className = 'alert alert-success';
+                successMsg.innerHTML = '<i class="bi bi-check-circle"></i> Logs cleared successfully. Only new logs will be shown.';
+                container.appendChild(successMsg);
+                
+                console.log(`Logs cleared for charger: ${selectedChargerId}`);
+            } else {
+                throw new Error('Failed to clear logs');
+            }
+        } catch (error) {
+            console.error('Error clearing logs:', error);
+            alert('Failed to clear logs. Please try again.');
+        }
+    }
 }
 
 // Toggle auto-scroll functionality
