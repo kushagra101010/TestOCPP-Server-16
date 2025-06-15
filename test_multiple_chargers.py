@@ -16,7 +16,7 @@ class ChargePoint(cp):
         self.charger_id = id
 
     async def send_boot_notification(self):
-        request = call.BootNotificationPayload(
+        request = call.BootNotification(
             charge_point_model=f"Model_{self.charger_id[-3:]}",  # Keep it short
             charge_point_vendor=f"Vendor_{self.charger_id[-3:]}"  # Keep it short
         )
@@ -24,12 +24,12 @@ class ChargePoint(cp):
         logger.info(f"{self.charger_id}: BootNotification response: {response}")
 
     async def send_heartbeat(self):
-        request = call.HeartbeatPayload()
+        request = call.Heartbeat()
         response = await self.call(request)
         logger.info(f"{self.charger_id}: Heartbeat response: {response}")
 
     async def send_status_notification(self):
-        request = call.StatusNotificationPayload(
+        request = call.StatusNotification(
             connector_id=1,
             error_code="NoError",
             status=ChargePointStatus.available

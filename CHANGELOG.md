@@ -5,6 +5,63 @@ All notable changes to this OCPP 1.6 Server project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2025-01-15
+
+### 🔔 Enhanced TriggerMessage Support
+
+This is a minor release that adds complete TriggerMessage support, improved CSV export functionality, and additional OCPP message handlers for better protocol compliance.
+
+### ✨ Added
+- **FirmwareStatusNotification Handler**: Added `@on('FirmwareStatusNotification')` handler for firmware update status reports
+- **DiagnosticsStatusNotification Handler**: Added `@on('DiagnosticsStatusNotification')` handler for diagnostics operation status reports
+- **Enhanced CSV Export Format**: Improved CSV download with proper message flow directions and compact JSON
+- **Complete Error Handling**: Added comprehensive error handling for all new message handlers
+
+### 🔧 Changed
+- **CSV Message Flow**: Updated direction indicators from "CMS->CI" to "CMS->CP" and "CP->CMS"
+- **CSV JSON Format**: Changed from formatted multi-line JSON to compact single-line JSON in CSV exports
+- **CSV Column Order**: Enhanced CPID, RecieveTime, UniqueID, MsgFlow, Command, PayloadData structure
+- **Log Chronology**: Reversed CSV order to show latest logs first (reverse chronological)
+
+### 🐛 Fixed
+- **TriggerMessage "NotImplemented"**: Fixed server responding with "NotImplemented" for FirmwareStatusNotification and DiagnosticsStatusNotification
+- **CSV Raw Data**: Fixed CSV showing "Raw" data with "[" payload instead of proper JSON parsing
+- **Message Flow Direction**: Corrected message flow indicators in CSV exports
+- **Multi-line JSON Parsing**: Enhanced JSON parsing with `/s` regex flag for WebSocket frames with formatted JSON
+
+### 🔄 Enhanced Features
+- **Protocol Compliance**: Better OCPP 1.6 compliance with additional message handlers
+- **CSV Export Quality**: More professional CSV format matching industry standards
+- **Handler Registration**: All new handlers properly registered with ChargePoint class
+- **Error Management**: Consistent error handling patterns across all handlers
+
+### 🧪 Testing
+- **TriggerMessage Support**: Verified FirmwareStatusNotification and DiagnosticsStatusNotification handlers work correctly
+- **CSV Format**: Confirmed proper message flow directions and compact JSON format in exports
+- **Handler Integration**: Tested all new handlers are properly loaded and accessible
+- **Backward Compatibility**: Ensured all existing functionality continues to work
+
+### 📋 Technical Details
+
+#### New Message Handlers
+```python
+@on('FirmwareStatusNotification')
+async def on_firmware_status_notification(self, status):
+    # Handles firmware update status reports
+    
+@on('DiagnosticsStatusNotification')  
+async def on_diagnostics_status_notification(self, status):
+    # Handles diagnostics operation status reports
+```
+
+#### CSV Export Improvements
+- **Message Flow Detection**: Proper CMS->CP and CP->CMS direction identification
+- **JSON Compaction**: Converts formatted JSON to single-line format
+- **OCPP Structure Parsing**: Enhanced parsing of [MessageType, UniqueID, Command, PayloadData] arrays
+- **Chronological Ordering**: Latest entries appear first in CSV exports
+
+---
+
 ## [2.0.0] - 2025-06-15
 
 ### 🎉 Major Release - OCPP Python Library Upgrade

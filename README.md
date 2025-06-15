@@ -1,18 +1,24 @@
-# OCPP 1.6 Server v2.0.0 - Central Management System
+# OCPP 1.6 Server v2.1.0 - Central Management System
 
 Professional OCPP 1.6 Central Management System (CMS) for EV charging stations with web-based dashboard and real-time monitoring.
 
-![OCPP Server](https://img.shields.io/badge/OCPP-1.6-blue) ![Version](https://img.shields.io/badge/Version-2.0.0-green) ![Python](https://img.shields.io/badge/Python-3.8+-green) ![License](https://img.shields.io/badge/License-MIT-yellow)
+![OCPP Server](https://img.shields.io/badge/OCPP-1.6-blue) ![Version](https://img.shields.io/badge/Version-2.1.0-green) ![Python](https://img.shields.io/badge/Python-3.8+-green) ![License](https://img.shields.io/badge/License-MIT-yellow)
 
-## 🎉 What's New in v2.0.0
+## 🎉 What's New in v2.1.0
 
-### Major Updates
+### Latest Updates
+- **🔔 TriggerMessage Support**: Enhanced support for firmware and diagnostics status notifications
+- **📊 CSV Export Improvements**: Enhanced CSV download format with proper message flow directions and compact JSON
+- **🛠️ Handler Enhancements**: Added missing message handlers for complete OCPP 1.6 compliance
+- **🔧 Bug Fixes**: Various improvements to message handling and data formatting
+
+### Major Updates from v2.0.0
 - **🔧 Enhanced Stability**: Upgraded to OCPP Python library 2.0.0 for better reliability
 - **🐛 Bug Fixes**: Fixed critical issues with remote commands and data type handling
 - **⚡ Improved Performance**: Better error handling and logging throughout the system
 - **🔄 Dependency Updates**: All packages updated to latest stable versions
 
-**Note**: This is **OCPP 1.6 Server software version 2.0.0** - it implements the OCPP 1.6 protocol, not OCPP 2.0.1 protocol.
+**Note**: This is **OCPP 1.6 Server software version 2.1.0** - it implements the OCPP 1.6 protocol, not OCPP 2.0.1 protocol.
 
 ## 🚀 Quick Start
 
@@ -130,7 +136,7 @@ The server supports both types of OCPP 1.6 reset operations:
 ## 🔧 File Structure
 
 ```
-OCPP_1.6_Server_v2.0.0/
+OCPP_1.6_Server_v2.1.0/
 ├── setup.bat              # One-time installation script
 ├── start_server.bat        # Start the OCPP server
 ├── demo_charger.bat        # Run demo charger for testing
@@ -218,4 +224,4 @@ This software is provided under the MIT License. See LICENSE file for details.
 
 ---
 
-**© 2025 OCPP 1.6 Server v2.0.0 - Professional EV Charging Management System** 
+**© 2025 OCPP 1.6 Server v2.1.0 - Professional EV Charging Management System** 

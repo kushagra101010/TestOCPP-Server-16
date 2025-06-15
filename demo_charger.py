@@ -5,7 +5,7 @@ from datetime import datetime
 import random
 from ocpp.v16 import ChargePoint as cp
 from ocpp.v16 import call, call_result
-from ocpp.v16.enums import RegistrationStatus, ChargePointStatus, AuthorizationStatus, Action, RemoteStartStopStatus
+from ocpp.v16.enums import RegistrationStatus, ChargePointStatus, AuthorizationStatus, RemoteStartStopStatus
 from ocpp.routing import on
 
 # Configure logging
@@ -24,7 +24,7 @@ class ChargePoint(cp):
         self._authorization_lock = asyncio.Lock()  # Prevent concurrent authorizations
 
     async def send_boot_notification(self):
-        request = call.BootNotificationPayload(
+        request = call.BootNotification(
             charge_point_model="DemoModel",
             charge_point_vendor="DemoVendor"
         )
@@ -33,13 +33,13 @@ class ChargePoint(cp):
         return response
 
     async def send_heartbeat(self):
-        request = call.HeartbeatPayload()
+        request = call.Heartbeat()
         response = await self.call(request)
         logger.info(f"Heartbeat response: {response}")
         return response
 
     async def send_status_notification(self, connector_id: int, status: str):
-        request = call.StatusNotificationPayload(
+        request = call.StatusNotification(
             connector_id=connector_id,
             error_code="NoError",
             status=status
@@ -57,7 +57,7 @@ class ChargePoint(cp):
                 return True
             
             try:
-                request = call.AuthorizePayload(id_tag=id_tag)
+                request = call.Authorize(id_tag=id_tag)
                 response = await self.call(request)
                 logger.info(f"Authorize response for {id_tag}: {response}")
                 
@@ -83,7 +83,7 @@ class ChargePoint(cp):
         self.meter_start_value = random.randint(1000, 5000)  # Random starting meter value
         self.meter_current_value = self.meter_start_value
         
-        request = call.StartTransactionPayload(
+        request = call.StartTransaction(
             connector_id=connector_id,
             id_tag=id_tag,
             meter_start=self.meter_start_value,
@@ -111,7 +111,7 @@ class ChargePoint(cp):
         # Update status to finishing
         await self.send_status_notification(connector_id, ChargePointStatus.finishing)
         
-        request = call.StopTransactionPayload(
+        request = call.StopTransaction(
             transaction_id=self.current_transaction_id,
             meter_stop=self.meter_current_value,
             timestamp=datetime.utcnow().isoformat(),
@@ -137,7 +137,7 @@ class ChargePoint(cp):
             # Simulate energy consumption (add 10-50 Wh per reading)
             self.meter_current_value += random.randint(10, 50)
         
-        request = call.MeterValuesPayload(
+        request = call.MeterValues(
             connector_id=connector_id,
             transaction_id=transaction_id or self.current_transaction_id,
             meter_value=[{
@@ -155,7 +155,7 @@ class ChargePoint(cp):
         logger.info(f"MeterValues response: {response} (Current: {self.meter_current_value} Wh)")
 
     # Handle remote start transaction request from CMS
-    @on(Action.RemoteStartTransaction)
+    @on('RemoteStartTransaction')
     async def on_remote_start_transaction(self, id_tag, connector_id=None, charging_profile=None):
         """Handle RemoteStartTransaction request from CMS"""
         # Default to connector 1 if not specified
@@ -168,7 +168,7 @@ class ChargePoint(cp):
             # Check if charger is available
             if self.charging:
                 logger.warning("⚠️ Charger is already charging, cannot start new transaction")
-                return call_result.RemoteStartTransactionPayload(status=RemoteStartStopStatus.rejected)
+                return call_result.RemoteStartTransaction(status=RemoteStartStopStatus.rejected)
             
             # Skip explicit authorization for now - CMS handles this
             # The demo charger will trust that the CMS has already authorized the tag
@@ -179,14 +179,14 @@ class ChargePoint(cp):
             asyncio.create_task(self._handle_remote_start_async(connector_id, id_tag))
             
             logger.info(f"✅ Remote start transaction accepted for {id_tag}")
-            return call_result.RemoteStartTransactionPayload(status=RemoteStartStopStatus.accepted)
+            return call_result.RemoteStartTransaction(status=RemoteStartStopStatus.accepted)
             
         except Exception as e:
             logger.error(f"❌ Error in remote start transaction: {e}")
-            return call_result.RemoteStartTransactionPayload(status=RemoteStartStopStatus.rejected)
+            return call_result.RemoteStartTransaction(status=RemoteStartStopStatus.rejected)
 
     # Handle remote stop transaction request from CMS
-    @on(Action.RemoteStopTransaction)
+    @on('RemoteStopTransaction')
     async def on_remote_stop_transaction(self, transaction_id):
         """Handle RemoteStopTransaction request from CMS"""
         logger.info(f"🛑 Received RemoteStopTransaction request - Transaction ID: {transaction_id}")
@@ -195,20 +195,20 @@ class ChargePoint(cp):
             # Check if this is the current transaction
             if not self.charging or self.current_transaction_id != transaction_id:
                 logger.warning(f"⚠️ No matching active transaction found for ID: {transaction_id}")
-                return call_result.RemoteStopTransactionPayload(status=RemoteStartStopStatus.rejected)
+                return call_result.RemoteStopTransaction(status=RemoteStartStopStatus.rejected)
             
             # Start the stop process asynchronously to avoid timeouts
             asyncio.create_task(self._handle_remote_stop_async(transaction_id))
             
             logger.info(f"✅ Remote stop transaction accepted for {transaction_id}")
-            return call_result.RemoteStopTransactionPayload(status=RemoteStartStopStatus.accepted)
+            return call_result.RemoteStopTransaction(status=RemoteStartStopStatus.accepted)
             
         except Exception as e:
             logger.error(f"❌ Error in remote stop transaction: {e}")
-            return call_result.RemoteStopTransactionPayload(status=RemoteStartStopStatus.rejected)
+            return call_result.RemoteStopTransaction(status=RemoteStartStopStatus.rejected)
 
     # Handle GetConfiguration request from CMS
-    @on(Action.GetConfiguration)
+    @on('GetConfiguration')
     async def on_get_configuration(self, key=None, **kwargs):
         """Handle GetConfiguration request from CMS"""
         logger.info(f"⚙️ Received GetConfiguration request - Keys: {key}")
@@ -250,13 +250,13 @@ class ChargePoint(cp):
         if unknown_keys:
             logger.warning(f"⚠️ Unknown keys requested: {unknown_keys}")
         
-        return call_result.GetConfigurationPayload(
+        return call_result.GetConfiguration(
             configurationKey=filtered_keys,
             unknownKey=unknown_keys
         )
 
     # Handle ChangeConfiguration request from CMS
-    @on(Action.ChangeConfiguration)
+    @on('ChangeConfiguration')
     async def on_change_configuration(self, key, value, **kwargs):
         """Handle ChangeConfiguration request from CMS"""
         logger.info(f"🔧 Received ChangeConfiguration request - Key: {key}, Value: {value}")
@@ -272,17 +272,17 @@ class ChargePoint(cp):
         # Check if key is read-only
         if key in readonly_keys:
             logger.warning(f"❌ Cannot change read-only key: {key}")
-            return call_result.ChangeConfigurationPayload(status="Rejected")
+            return call_result.ChangeConfiguration(status="Rejected")
         
         # Simulate configuration change (in a real charger, this would update actual settings)
         logger.info(f"✅ Configuration changed: {key} = {value}")
         
         # For demo purposes, we'll accept most changes
         # In a real implementation, you'd validate the value and update internal settings
-        return call_result.ChangeConfigurationPayload(status="Accepted")
+        return call_result.ChangeConfiguration(status="Accepted")
 
     # Handle Reset request from CMS
-    @on(Action.Reset)
+    @on('Reset')
     async def on_reset(self, type, **kwargs):
         """Handle Reset request from CMS"""
         logger.info(f"🔄 Received Reset request - Type: {type}")
@@ -320,11 +320,11 @@ class ChargePoint(cp):
                 await self.send_status_notification(1, ChargePointStatus.available)
                 logger.info("✅ Soft reset completed - charger software restarted")
             
-            return call_result.ResetPayload(status="Accepted")
+            return call_result.Reset(status="Accepted")
             
         except Exception as e:
             logger.error(f"❌ Error during reset: {e}")
-            return call_result.ResetPayload(status="Rejected")
+            return call_result.Reset(status="Rejected")
 
     async def _handle_remote_start_async(self, connector_id: int, id_tag: str):
         """Handle the actual remote start process asynchronously"""
