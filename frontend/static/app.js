@@ -8,6 +8,33 @@ const POLLING_INTERVAL = 2000; // 2 seconds
 // Store packets data for easy access
 let packetsData = [];
 
+// Utility function to format UTC time to IST
+function formatToIST(utcTimeString) {
+    try {
+        // Parse the UTC time string
+        const utcDate = new Date(utcTimeString);
+        
+        // Convert to IST (UTC+5:30)
+        const istDate = new Date(utcDate.getTime() + (5.5 * 60 * 60 * 1000));
+        
+        // Format as readable string
+        const options = {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        };
+        
+        return istDate.toLocaleString('en-IN', options) + ' IST';
+    } catch (error) {
+        console.error('Error formatting time to IST:', error);
+        return utcTimeString; // Fallback to original string
+    }
+}
+
 // Store configuration data from Get Configuration response
 let configurationData = null;
 
@@ -96,7 +123,7 @@ function updateChargerList(chargers) {
                     <h6 class="mb-1">${chargingIndicator}${charger.id}</h6>
                     <small class="text-muted">Status: ${statusDisplay}</small>
                     <br>
-                    <small class="text-muted">Last seen: ${charger.last_seen ? new Date(charger.last_seen).toLocaleString() : 'Never'}</small>
+                    <small class="text-muted">Last seen: ${charger.last_seen ? formatToIST(charger.last_seen) : 'Never'}</small>
                     ${transactionInfo}
                 </div>
                 <span class="badge ${statusClass}">

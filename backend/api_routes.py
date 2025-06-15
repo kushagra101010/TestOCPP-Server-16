@@ -76,6 +76,14 @@ class WebSocketAdapter:
                     charger_store.add_log(self.charge_point_id, f"WebSocket Charger→CMS Frame: {json.dumps(parsed_msg, indent=2)}")
                 except:
                     charger_store.add_log(self.charge_point_id, f"WebSocket Charger→CMS Frame: {message}")
+                
+                # Update last_heartbeat on ANY WebSocket message received
+                from .database import Charger
+                charger = db.session.query(Charger).filter_by(charge_point_id=self.charge_point_id).first()
+                if charger:
+                    charger.last_heartbeat = datetime.utcnow()
+                    db.session.commit()
+                
                 return message
             except WebSocketDisconnect:
                 self._closed = True

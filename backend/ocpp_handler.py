@@ -98,10 +98,10 @@ class ChargePoint(BaseChargePoint):
             # Add log entry
             charger_store.add_log(self.charge_point_id, "Heartbeat received")
             
-            # Update last seen timestamp
+            # Update last heartbeat timestamp
             charger = db.session.query(Charger).filter_by(charge_point_id=self.charge_point_id).first()
             if charger:
-                charger.last_seen = datetime.utcnow()
+                charger.last_heartbeat = datetime.utcnow()
                 db.session.commit()
             
             return call_result.Heartbeat(
