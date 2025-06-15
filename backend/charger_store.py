@@ -119,7 +119,7 @@ class ChargerStore:
     def add_id_tag(self, id_tag: str, status: str = "Accepted", expiry_date=None) -> None:
         """Add or update an idTag."""
         db.save_id_tag(id_tag, status, expiry_date)
-        logger.info(f"Added/Updated idTag: {id_tag} with status: {status} and expiry: {expiry_date}")
+        logger.info(f"Added/Updated idTag: {id_tag} with status: {status}")
 
     def get_id_tags(self) -> Dict[str, dict]:
         """Get all idTags."""

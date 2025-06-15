@@ -571,9 +571,14 @@ function updateIdTagList(idTags) {
             <div class="card">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <h6 class="card-title">${idTag}</h6>
-                            ${expiryText}
+                        <div class="d-flex align-items-start gap-2">
+                            <div class="form-check mt-1">
+                                <input class="form-check-input idtag-checkbox" type="checkbox" value="${idTag}" id="checkbox-${idTag}" onchange="updateSelectedCount()">
+                            </div>
+                            <div>
+                                <h6 class="card-title mb-1">${idTag}</h6>
+                                ${expiryText}
+                            </div>
                         </div>
                         <div class="d-flex flex-column align-items-end gap-2">
                             <span class="badge ${badgeClass}">${info.status}</span>
@@ -595,15 +600,42 @@ function updateIdTagList(idTags) {
             select.appendChild(option);
         }
     });
+    
+    // Update selected count after loading
+    updateSelectedCount();
 }
 
 // Add new ID tag
+// Update character count for ID tag input
+function updateCharCount() {
+    const input = document.getElementById('newIdTag');
+    const counter = document.getElementById('charCount');
+    const currentLength = input.value.length;
+    
+    counter.textContent = `${currentLength}/20 characters`;
+    
+    // Change color based on remaining characters
+    if (currentLength >= 18) {
+        counter.className = 'text-warning';
+    } else if (currentLength === 20) {
+        counter.className = 'text-danger';
+    } else {
+        counter.className = 'text-muted';
+    }
+}
+
 async function addIdTag() {
     const idTag = document.getElementById('newIdTag').value.trim();
     const expiryDateTime = document.getElementById('newIdTagExpiry').value;
     
     if (!idTag) {
         alert('Please enter an ID tag');
+        return;
+    }
+    
+    // Validate ID tag length according to OCPP 1.6 specification (max 20 characters)
+    if (idTag.length > 20) {
+        alert(`ID tag is too long! Maximum length is 20 characters (OCPP 1.6 specification).\n\nCurrent length: ${idTag.length} characters\nPlease shorten the ID tag.`);
         return;
     }
 
@@ -629,6 +661,7 @@ async function addIdTag() {
         if (response.ok) {
             document.getElementById('newIdTag').value = '';
             document.getElementById('newIdTagExpiry').value = '';
+            updateCharCount(); // Reset character counter
             loadIdTags();
             alert('ID Tag added successfully!');
         } else {
@@ -662,6 +695,121 @@ async function deleteIdTag(idTag) {
     } catch (error) {
         console.error('Error deleting ID tag:', error);
         alert('Error deleting ID tag');
+    }
+}
+
+// Update selected count and button state
+function updateSelectedCount() {
+    const checkboxes = document.querySelectorAll('.idtag-checkbox');
+    const selectedCheckboxes = document.querySelectorAll('.idtag-checkbox:checked');
+    const selectedCount = selectedCheckboxes.length;
+    
+    // Update count display
+    document.getElementById('selectedCount').textContent = selectedCount;
+    
+    // Enable/disable delete button
+    const deleteBtn = document.getElementById('deleteSelectedBtn');
+    deleteBtn.disabled = selectedCount === 0;
+    
+    // Update select all button text
+    const selectAllBtn = document.getElementById('selectAllBtn');
+    if (selectedCount === checkboxes.length && checkboxes.length > 0) {
+        selectAllBtn.innerHTML = '<i class="bi bi-check-all"></i> All Selected';
+        selectAllBtn.classList.add('active');
+    } else {
+        selectAllBtn.innerHTML = '<i class="bi bi-check-all"></i> Select All';
+        selectAllBtn.classList.remove('active');
+    }
+}
+
+// Select all ID tags
+function selectAllIdTags() {
+    const checkboxes = document.querySelectorAll('.idtag-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = true;
+    });
+    updateSelectedCount();
+}
+
+// Deselect all ID tags
+function deselectAllIdTags() {
+    const checkboxes = document.querySelectorAll('.idtag-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    updateSelectedCount();
+}
+
+// Delete selected ID tags
+async function deleteSelectedIdTags() {
+    const selectedCheckboxes = document.querySelectorAll('.idtag-checkbox:checked');
+    const selectedIdTags = Array.from(selectedCheckboxes).map(cb => cb.value);
+    
+    if (selectedIdTags.length === 0) {
+        alert('No ID tags selected');
+        return;
+    }
+    
+    const confirmMessage = selectedIdTags.length === 1 
+        ? `Are you sure you want to delete the selected ID tag "${selectedIdTags[0]}"?`
+        : `Are you sure you want to delete ${selectedIdTags.length} selected ID tags?\n\nTags to delete:\n${selectedIdTags.join('\n')}`;
+    
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+    
+    // Show progress
+    const deleteBtn = document.getElementById('deleteSelectedBtn');
+    const originalText = deleteBtn.innerHTML;
+    deleteBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Deleting...';
+    deleteBtn.disabled = true;
+    
+    let successCount = 0;
+    let errorCount = 0;
+    const errors = [];
+    
+    try {
+        // Delete each ID tag
+        for (const idTag of selectedIdTags) {
+            try {
+                const response = await fetch(`/api/idtags/${encodeURIComponent(idTag)}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    successCount++;
+                } else {
+                    errorCount++;
+                    const errorData = await response.json();
+                    errors.push(`${idTag}: ${errorData.detail || 'Unknown error'}`);
+                }
+            } catch (error) {
+                errorCount++;
+                errors.push(`${idTag}: ${error.message}`);
+            }
+        }
+        
+        // Show results
+        let message = '';
+        if (successCount > 0) {
+            message += `Successfully deleted ${successCount} ID tag${successCount > 1 ? 's' : ''}`;
+        }
+        if (errorCount > 0) {
+            if (message) message += '\n\n';
+            message += `Failed to delete ${errorCount} ID tag${errorCount > 1 ? 's' : ''}:\n${errors.join('\n')}`;
+        }
+        
+        if (message) {
+            alert(message);
+        }
+        
+        // Reload the list
+        loadIdTags();
+        
+    } finally {
+        // Reset button
+        deleteBtn.innerHTML = originalText;
+        updateSelectedCount();
     }
 }
 
@@ -1159,6 +1307,7 @@ async function resetCharger(resetType) {
 async function sendLocalList() {
     const updateType = document.getElementById('localListUpdateType').value;
     const data = document.getElementById('localListData').value;
+    const forceStoreLocally = document.getElementById('forceStoreLocally').checked;
 
     try {
         const response = await fetch(`/api/send/${selectedChargerId}/send_local_list`, {
@@ -1168,19 +1317,47 @@ async function sendLocalList() {
             },
             body: JSON.stringify({
                 update_type: updateType,
-                local_authorization_list: data ? JSON.parse(data) : null
+                local_authorization_list: data ? JSON.parse(data) : null,
+                force_store_locally: forceStoreLocally
             })
         });
 
         if (response.ok) {
+            const result = await response.json();
             modals.sendLocalList.hide();
-            alert('Local list sent successfully');
+            
+            // Count the number of ID tags that were sent
+            let tagCount = 0;
+            if (data) {
+                try {
+                    const parsedData = JSON.parse(data);
+                    tagCount = Array.isArray(parsedData) ? parsedData.length : 0;
+                } catch (e) {
+                    tagCount = 0;
+                }
+            }
+            
+            // Check if the charger accepted the local list
+            if (result.response && result.response.status === 'Accepted') {
+                alert(`Local list sent successfully!\n\nCharger response: ${result.response.status}\n${tagCount > 0 ? `\n${tagCount} ID tags have been sent to the charger and stored locally.` : ''}`);
+            } else {
+                const status = result.response ? result.response.status : 'Unknown';
+                if (forceStoreLocally && tagCount > 0) {
+                    alert(`Local list sent but charger responded with: ${status}\n\nHowever, ${tagCount} ID tags have been stored locally as requested.`);
+                } else {
+                    alert(`Local list sent but charger responded with: ${status}\n\nID tags were not stored locally.`);
+                }
+            }
+            
+            // Refresh the ID tags list to show any newly added tags
+            loadIdTags();
         } else {
-            alert('Error sending local list');
+            const errorData = await response.json();
+            alert(`Error sending local list: ${errorData.detail || 'Unknown error'}`);
         }
     } catch (error) {
         console.error('Error sending local list:', error);
-        alert('Error sending local list');
+        alert('Error sending local list. Please check the JSON format and try again.');
     }
 }
 
@@ -1445,9 +1622,13 @@ function generateCustomRandomList(count = 10, validityDays = 1) {
     const expiryDate = new Date(now.getTime() + (validityDays * 24 * 60 * 60 * 1000));
     
     for (let i = 0; i < count; i++) {
-        // Generate random ID tag (mix of letters and numbers)
-        const randomId = 'TAG' + Math.random().toString(36).substring(2, 8).toUpperCase() + 
-                         Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+        // Generate random ID tag - exactly 20 characters as per OCPP 1.6 specification
+        // Format: TAG + 17 random alphanumeric characters = 20 total characters
+        let randomId = 'TAG';
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        for (let j = 0; j < 17; j++) {
+            randomId += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
         
         tags.push({
             idTag: randomId,
@@ -1464,7 +1645,7 @@ function generateCustomRandomList(count = 10, validityDays = 1) {
         localListTextarea.value = JSON.stringify(tags, null, 2);
         
         // Show success message
-        alert(`Generated ${count} random ID tags with ${validityDays} day validity!\n\nTags are now loaded in the Send Local List dialog. You can review and modify them before sending.\n\nGenerated tags: ${tags.map(t => t.idTag).join(', ')}`);
+        alert(`Generated ${count} random 20-character ID tags with ${validityDays} day validity (OCPP 1.6 compliant)!\n\nTags are now loaded in the Send Local List dialog. You can review and modify them before sending.\n\nGenerated tags: ${tags.map(t => t.idTag).join(', ')}`);
         
         // Also log to console for debugging
         console.log('Generated random local list:', tags);

@@ -43,6 +43,7 @@ class DataTransferPacketRequest(BaseModel):
 class LocalListRequest(BaseModel):
     update_type: str  # "Full" or "Differential"
     local_authorization_list: Optional[List[Dict]] = None
+    force_store_locally: Optional[bool] = False
 
 # Store active WebSocket connections
 charge_points: Dict[str, ChargePoint] = {}
@@ -393,7 +394,7 @@ async def trigger_message(charge_point_id: str, request: TriggerMessageRequest):
 
 @router.post("/api/send/{charge_point_id}/send_local_list")
 async def send_local_list(charge_point_id: str, request: LocalListRequest):
-    """Send SendLocalList request."""
+    """Send SendLocalList request and store ID tags locally."""
     if charge_point_id not in charge_points:
         raise HTTPException(status_code=404, detail="Charger not connected")
     
@@ -404,8 +405,45 @@ async def send_local_list(charge_point_id: str, request: LocalListRequest):
             update_type=request.update_type,
             local_authorization_list=request.local_authorization_list
         )
+        
+        # Store ID tags locally if charger accepted OR if force_store_locally is True
+        charger_accepted = response and hasattr(response, 'status') and response.status == "Accepted"
+        should_store_locally = charger_accepted or request.force_store_locally
+        
+        if should_store_locally and request.local_authorization_list:
+            stored_count = 0
+            for auth_item in request.local_authorization_list:
+                if 'idTag' in auth_item:
+                    id_tag = auth_item['idTag']
+                    
+                    # Validate ID tag length according to OCPP 1.6 specification (max 20 characters)
+                    if len(id_tag) > 20:
+                        logger.warning(f"Skipping ID tag '{id_tag}' - exceeds 20 character limit (length: {len(id_tag)})")
+                        continue
+                    
+                    id_tag_info = auth_item.get('idTagInfo', {})
+                    
+                    # Extract status and expiry date
+                    status = id_tag_info.get('status', 'Accepted')
+                    expiry_date = None
+                    
+                    if 'expiryDate' in id_tag_info:
+                        try:
+                            from datetime import datetime
+                            expiry_date = datetime.fromisoformat(id_tag_info['expiryDate'].replace('Z', '+00:00'))
+                        except (ValueError, TypeError) as e:
+                            logger.warning(f"Invalid expiry date format for {id_tag}: {id_tag_info['expiryDate']}")
+                    
+                    # Store the ID tag locally
+                    charger_store.add_id_tag(id_tag, status, expiry_date)
+                    stored_count += 1
+            
+            store_reason = "charger accepted" if charger_accepted else "force_store_locally enabled"
+            logger.info(f"Successfully stored {stored_count} ID tags locally from local list ({store_reason})")
+        
         return {"status": "success", "response": response}
     except Exception as e:
+        logger.error(f"Error in send_local_list: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/api/send/{charge_point_id}/clear_local_list")
@@ -462,6 +500,13 @@ async def get_id_tags():
 @router.post("/api/idtags")
 async def add_id_tag(request: IdTagRequest):
     """Add or update an idTag."""
+    # Validate ID tag length according to OCPP 1.6 specification (max 20 characters)
+    if len(request.id_tag) > 20:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"ID tag is too long! Maximum length is 20 characters (OCPP 1.6 specification). Current length: {len(request.id_tag)} characters."
+        )
+    
     expiry_date = None
     if request.expiry_date:
         try:

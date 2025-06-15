@@ -178,7 +178,8 @@
                                         <div class="row">
                                             <div class="col-md-4">
                                                 <label class="form-label">ID Tag</label>
-                                                <input type="text" class="form-control" id="newIdTag" placeholder="Enter ID Tag">
+                                                <input type="text" class="form-control" id="newIdTag" placeholder="Enter ID Tag (max 20 chars)" maxlength="20" oninput="updateCharCount()">
+                                                <small class="text-muted" id="charCount">0/20 characters</small>
                                             </div>
                                             <div class="col-md-4">
                                                 <label class="form-label">Expiry Date & Time (Optional)</label>
@@ -195,8 +196,19 @@
 
                                 <!-- ID Tags List -->
                                 <div class="card">
-                                    <div class="card-header">
+                                    <div class="card-header d-flex justify-content-between align-items-center">
                                         <h6 class="mb-0">Existing ID Tags</h6>
+                                        <div class="btn-group" role="group">
+                                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="selectAllIdTags()" id="selectAllBtn">
+                                                <i class="bi bi-check-all"></i> Select All
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="deselectAllIdTags()" id="deselectAllBtn">
+                                                <i class="bi bi-x-square"></i> Deselect All
+                                            </button>
+                                            <button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteSelectedIdTags()" id="deleteSelectedBtn" disabled>
+                                                <i class="bi bi-trash"></i> Delete Selected (<span id="selectedCount">0</span>)
+                                            </button>
+                                        </div>
                                     </div>
                                     <div class="card-body">
                                         <div id="idTagList" class="row">
@@ -327,6 +339,21 @@
                     <div class="mb-3">
                         <label class="form-label">Authorization List (JSON)</label>
                         <textarea class="form-control" id="localListData" rows="5"></textarea>
+                        <div class="form-text">
+                            Format: [{"idTag": "TAG123", "idTagInfo": {"status": "Accepted", "expiryDate": "2025-12-31T23:59:59Z"}}]<br>
+                            <strong>Note:</strong> ID tags must be max 20 characters (OCPP 1.6 specification)
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="forceStoreLocally" checked>
+                            <label class="form-check-label" for="forceStoreLocally">
+                                Store ID tags locally even if charger rejects the list
+                            </label>
+                            <div class="form-text">
+                                When checked, ID tags will be stored in the server's local database regardless of the charger's response.
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
