@@ -176,13 +176,12 @@ async def websocket_endpoint(websocket: WebSocket, charge_point_id: str):
         charge_points[charge_point_id] = charge_point
         logger.info(f"Added {charge_point_id} to charge_points. Current connections: {list(charge_points.keys())}")
         
-        # Update charger status in database
+        # Update charger last_heartbeat in database (but not status - StatusNotification handles that)
         charger = db.session.query(Charger).filter_by(charge_point_id=charge_point_id).first()
         if charger:
-            charger.status = "Connected"
             charger.last_heartbeat = datetime.utcnow()
             db.session.commit()
-            logger.info(f"Updated database status for {charge_point_id}: Connected")
+            logger.info(f"Updated database last_heartbeat for {charge_point_id}")
         
         try:
             # Start the charge point
@@ -199,16 +198,9 @@ async def websocket_endpoint(websocket: WebSocket, charge_point_id: str):
                 del charge_points[charge_point_id]
                 logger.info(f"Removed {charge_point_id} from charge_points. After cleanup: {list(charge_points.keys())}")
             
-            # Update charger status in database only if no other WebSocket connection exists
-            # This prevents race conditions during reconnections
-            if charge_point_id not in charge_points:
-                charger = db.session.query(Charger).filter_by(charge_point_id=charge_point_id).first()
-                if charger:
-                    charger.status = "Disconnected"
-                    db.session.commit()
-                    logger.info(f"Updated database status for {charge_point_id}: Disconnected")
-            else:
-                logger.info(f"Not marking {charge_point_id} as disconnected - another WebSocket connection exists")
+            # No need to update database status - the API will show "Disconnected" based on WebSocket connectivity
+            # This preserves the last known status from StatusNotification
+            logger.info(f"WebSocket disconnected for {charge_point_id} - API will show as Disconnected")
                 
             await ws_adapter.close()
     except Exception as e:
@@ -249,11 +241,14 @@ async def get_chargers():
         is_ws_connected = charger.charge_point_id in charge_points
         logger.info(f"Charger {charger.charge_point_id}: WebSocket connected = {is_ws_connected}")
         
-        # A charger is considered connected if it has an active WebSocket connection
-        # This ensures UI shows "connected" immediately when any WebSocket packet is received
+        # Status logic: 
+        # - If WebSocket is connected: show the actual status from StatusNotification
+        # - If WebSocket is disconnected: show "Disconnected"
+        display_status = charger.status if is_ws_connected else "Disconnected"
+        
         charger_data = {
             "id": charger.charge_point_id,
-            "status": charger.status,
+            "status": display_status,
             "last_seen": charger.last_heartbeat.isoformat() if charger.last_heartbeat else None,
             "connected": is_ws_connected  # Primary indicator: active WebSocket connection
         }
@@ -266,7 +261,7 @@ async def get_chargers():
             logger.debug(f"Found WebSocket-only charger: {charge_point_id}")
             charger_data = {
                 "id": charge_point_id,
-                "status": "Connected",  # Default status for WebSocket-only chargers
+                "status": "Available",  # Default status for WebSocket-only chargers
                 "last_seen": None,
                 "connected": True  # Has active WebSocket connection
             }
@@ -538,20 +533,27 @@ async def get_connector_status(charge_point_id: str):
 @router.get("/api/active_transactions/{charge_point_id}")
 async def get_active_transactions(charge_point_id: str):
     """Get active transactions for a charger."""
-    from .database import Charger
-    charger = db.session.query(Charger).filter_by(charge_point_id=charge_point_id).first()
-    
-    active_transactions = []
-    if charger and charger.current_transaction:
-        # Check if charger is actively charging
-        if str(charger.status).lower() in ["charging", "preparing"]:
+    try:
+        active_transactions = []
+        
+        # Get active transaction using the charger store method
+        active_transaction = charger_store.get_active_transaction(charge_point_id)
+        
+        if active_transaction:
             active_transactions.append({
-                "transaction_id": charger.current_transaction,
-                "status": charger.status,
-                "start_time": charger.last_heartbeat.isoformat() if charger.last_heartbeat else None
+                "transaction_id": active_transaction['transaction_id'],
+                "status": active_transaction['status'],
+                "start_time": active_transaction['started_at'],
+                "id_tag": active_transaction.get('id_tag'),
+                "connector_id": active_transaction.get('connector_id', 1)
             })
-    
-    return {"active_transactions": active_transactions}
+        
+        logger.debug(f"Found {len(active_transactions)} active transactions for {charge_point_id}")
+        return {"active_transactions": active_transactions}
+        
+    except Exception as e:
+        logger.error(f"Error getting active transactions for {charge_point_id}: {e}")
+        return {"active_transactions": []}
 
 # Data Transfer Packet endpoints
 @router.get("/api/data_transfer_packets")

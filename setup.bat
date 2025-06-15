@@ -1,6 +1,6 @@
 @echo off
 echo ========================================
-echo   OCPP 1.6 Server v2.1.0 - Setup Script
+echo   OCPP 1.6 Server v2.1.1 - Setup Script
 echo ========================================
 echo.
 

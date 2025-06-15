@@ -33,18 +33,14 @@ class ChargePoint(BaseChargePoint):
 
     async def on_connect(self):
         """Handle charger connection."""
-        charger = db.session.query(Charger).filter_by(charge_point_id=self.charge_point_id).first()
-        if charger:
-            charger.status = ChargePointStatus.available
-            db.session.commit()
+        # Don't update status here - let StatusNotification handle it
+        # The API will show the correct status based on WebSocket connectivity
         logger.info(f"Charger {self.charge_point_id} connected")
 
     async def on_disconnect(self):
         """Handle charger disconnection."""
-        charger = db.session.query(Charger).filter_by(charge_point_id=self.charge_point_id).first()
-        if charger:
-            charger.status = ChargePointStatus.unavailable
-            db.session.commit()
+        # Don't update status here - the API will show "Disconnected" when WebSocket is not connected
+        # This preserves the last known status from StatusNotification
         logger.info(f"Charger {self.charge_point_id} disconnected")
 
     @on('BootNotification')
@@ -82,6 +78,11 @@ class ChargePoint(BaseChargePoint):
             if charger:
                 charger.status = status
                 db.session.commit()
+            
+            # Also update connector-specific status using charger store
+            charger_store.update_connector_status(self.charge_point_id, connector_id, status)
+            
+            logger.debug(f"Updated {self.charge_point_id} status to {status}")
                 
             return call_result.StatusNotification()
         except Exception as e:
@@ -151,6 +152,11 @@ class ChargePoint(BaseChargePoint):
             # Generate transaction ID
             transaction_id = int(datetime.utcnow().timestamp())
             
+            # Store active transaction in database (without changing overall status)
+            charger_store.set_active_transaction(self.charge_point_id, transaction_id, connector_id, id_tag)
+            
+            logger.info(f"✅ Transaction {transaction_id} started for {self.charge_point_id}")
+            
             return call_result.StartTransaction(
                 transaction_id=transaction_id,
                 id_tag_info=IdTagInfo(
@@ -170,6 +176,11 @@ class ChargePoint(BaseChargePoint):
             
             # Add log entry
             charger_store.add_log(self.charge_point_id, f"StopTransaction: transaction_id={transaction_id}, meter_stop={meter_stop}")
+            
+            # Clear active transaction from database
+            charger_store.clear_active_transaction(self.charge_point_id, transaction_id)
+            
+            logger.info(f"✅ Transaction {transaction_id} stopped for {self.charge_point_id}")
             
             return call_result.StopTransaction()
         except Exception as e:
