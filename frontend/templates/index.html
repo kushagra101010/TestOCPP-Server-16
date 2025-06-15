@@ -125,6 +125,9 @@
                                     </div>
                                     <button class="btn btn-outline-primary" onclick="showDataTransferModal()">Data Transfer</button>
                                     <button class="btn btn-outline-secondary" onclick="showDataTransferPacketsModal()">Data Transfer Packets</button>
+                                    <button class="btn btn-info" onclick="showTriggerMessageModal()">
+                                        <i class="bi bi-lightning"></i> Trigger Message
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -175,7 +178,8 @@
                                         <div class="row">
                                             <div class="col-md-4">
                                                 <label class="form-label">ID Tag</label>
-                                                <input type="text" class="form-control" id="newIdTag" placeholder="Enter ID Tag">
+                                                <input type="text" class="form-control" id="newIdTag" placeholder="Enter ID Tag (max 20 chars)" maxlength="20" oninput="updateCharCount()">
+                                                <small class="text-muted" id="charCount">0/20 characters</small>
                                             </div>
                                             <div class="col-md-4">
                                                 <label class="form-label">Expiry Date & Time (Optional)</label>
@@ -192,8 +196,19 @@
 
                                 <!-- ID Tags List -->
                                 <div class="card">
-                                    <div class="card-header">
+                                    <div class="card-header d-flex justify-content-between align-items-center">
                                         <h6 class="mb-0">Existing ID Tags</h6>
+                                        <div class="btn-group" role="group">
+                                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="selectAllIdTags()" id="selectAllBtn">
+                                                <i class="bi bi-check-all"></i> Select All
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="deselectAllIdTags()" id="deselectAllBtn">
+                                                <i class="bi bi-x-square"></i> Deselect All
+                                            </button>
+                                            <button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteSelectedIdTags()" id="deleteSelectedBtn" disabled>
+                                                <i class="bi bi-trash"></i> Delete Selected (<span id="selectedCount">0</span>)
+                                            </button>
+                                        </div>
                                     </div>
                                     <div class="card-body">
                                         <div id="idTagList" class="row">
@@ -324,6 +339,21 @@
                     <div class="mb-3">
                         <label class="form-label">Authorization List (JSON)</label>
                         <textarea class="form-control" id="localListData" rows="5"></textarea>
+                        <div class="form-text">
+                            Format: [{"idTag": "TAG123", "idTagInfo": {"status": "Accepted", "expiryDate": "2025-12-31T23:59:59Z"}}]<br>
+                            <strong>Note:</strong> ID tags must be max 20 characters (OCPP 1.6 specification)
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="forceStoreLocally" checked>
+                            <label class="form-check-label" for="forceStoreLocally">
+                                Store ID tags locally even if charger rejects the list
+                            </label>
+                            <div class="form-text">
+                                When checked, ID tags will be stored in the server's local database regardless of the charger's response.
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -409,6 +439,56 @@
                             <!-- Packets will be listed here -->
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trigger Message Modal -->
+    <div class="modal fade" id="triggerMessageModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-lightning"></i> Trigger Message
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Message Type</label>
+                        <select class="form-select" id="triggerMessageType">
+                            <option value="">Select message type...</option>
+                            <option value="BootNotification">Boot Notification</option>
+                            <option value="Heartbeat">Heartbeat</option>
+                            <option value="StatusNotification">Status Notification</option>
+                            <option value="MeterValues">Meter Values</option>
+                            <option value="DiagnosticsStatusNotification">Diagnostics Status Notification</option>
+                            <option value="FirmwareStatusNotification">Firmware Status Notification</option>
+                        </select>
+                        <small class="form-text text-muted">Select the type of message to trigger from the charger</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Connector ID (optional)</label>
+                        <input type="number" class="form-control" id="triggerMessageConnectorId" min="0" max="10">
+                        <small class="form-text text-muted">Required for StatusNotification and MeterValues. Use 0 for the charge point itself.</small>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>TriggerMessage</strong> requests the charger to send a specific message type. This is useful for:
+                        <ul class="mb-0 mt-2">
+                            <li><strong>BootNotification:</strong> Get charger information</li>
+                            <li><strong>Heartbeat:</strong> Force immediate heartbeat</li>
+                            <li><strong>StatusNotification:</strong> Get current connector status</li>
+                            <li><strong>MeterValues:</strong> Get current meter readings</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-info" onclick="sendTriggerMessage()" id="triggerMessageBtn" disabled>
+                        <i class="bi bi-lightning"></i> Trigger
+                    </button>
                 </div>
             </div>
         </div>

@@ -8,6 +8,33 @@ const POLLING_INTERVAL = 2000; // 2 seconds
 // Store packets data for easy access
 let packetsData = [];
 
+// Utility function to format UTC time to IST
+function formatToIST(utcTimeString) {
+    try {
+        // Parse the UTC time string
+        const utcDate = new Date(utcTimeString);
+        
+        // Convert to IST (UTC+5:30)
+        const istDate = new Date(utcDate.getTime() + (5.5 * 60 * 60 * 1000));
+        
+        // Format as readable string
+        const options = {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        };
+        
+        return istDate.toLocaleString('en-IN', options) + ' IST';
+    } catch (error) {
+        console.error('Error formatting time to IST:', error);
+        return utcTimeString; // Fallback to original string
+    }
+}
+
 // Store configuration data from Get Configuration response
 let configurationData = null;
 
@@ -96,7 +123,7 @@ function updateChargerList(chargers) {
                     <h6 class="mb-1">${chargingIndicator}${charger.id}</h6>
                     <small class="text-muted">Status: ${statusDisplay}</small>
                     <br>
-                    <small class="text-muted">Last seen: ${charger.last_seen ? new Date(charger.last_seen).toLocaleString() : 'Never'}</small>
+                    <small class="text-muted">Last seen: ${charger.last_seen ? formatToIST(charger.last_seen) : 'Never'}</small>
                     ${transactionInfo}
                 </div>
                 <span class="badge ${statusClass}">
@@ -282,10 +309,12 @@ function downloadLogsCSV() {
     }
     
     // Create CSV content
-    const csvHeaders = ['Charger ID', 'IST Time', 'UTC Time', 'Message Path', 'Payload'];
+    const csvHeaders = ['CPID', 'RecieveTime', 'UniqueID', 'MsgFlow', 'Command', 'PayloadData'];
     let csvContent = csvHeaders.join(',') + '\n';
     
-    currentLogs.forEach(log => {
+    // Process logs in reverse order (latest first)
+    const reversedLogs = [...currentLogs].reverse();
+    reversedLogs.forEach(log => {
         // Parse timestamp
         let timestamp;
         if (log.timestamp.includes('T')) {
@@ -298,59 +327,161 @@ function downloadLogsCSV() {
             timestamp = new Date(log.timestamp + 'Z');
         }
         
-        // Format IST time (UTC + 5:30)
-        const istTime = timestamp.toLocaleString('en-IN', { 
+        // Format IST time (UTC + 5:30) in M/d/yyyy, h:mm:ss tt format
+        const istTime = timestamp.toLocaleString('en-US', { 
             timeZone: 'Asia/Kolkata',
-            day: '2-digit',
-            month: '2-digit',
+            month: 'numeric',
+            day: 'numeric',
             year: 'numeric',
-            hour: '2-digit',
+            hour: 'numeric',
             minute: '2-digit',
             second: '2-digit',
-            hour12: false
-        });
+            hour12: true
+        }) + ' IST';
         
-        // Format UTC time
-        const utcTime = timestamp.toLocaleString('en-GB', { 
-            timeZone: 'UTC',
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false
-        });
+        // Parse the log message to extract OCPP frame data
+        let msgFlow = '';
+        let uniqueID = '';
+        let command = '';
+        let payloadData = '';
         
-        // Determine message path from log message
-        let messagePath = '';
-        let payload = '';
-        
-        // Parse the log message to extract direction and payload
         const message = log.message;
-        if (message.includes('send [')) {
-            messagePath = 'CMS->Charger';
-            // Extract JSON payload from send message
+        let jsonData = null;
+        
+        if (message.includes('WebSocket CMS→Charger Frame:')) {
+            msgFlow = 'CMS -> CP';
+            // Extract JSON payload from WebSocket frame (could be multi-line formatted JSON)
+            const match = message.match(/WebSocket CMS→Charger Frame: (.*)/s);
+            if (match) {
+                try {
+                    // Handle both single-line and multi-line JSON
+                    let jsonStr = match[1].trim();
+                    // If it starts with [, it's likely a JSON array
+                    if (jsonStr.startsWith('[')) {
+                        jsonData = JSON.parse(jsonStr);
+                    } else {
+                        // Try to parse as-is first
+                        jsonData = JSON.parse(jsonStr);
+                    }
+                } catch (e) {
+                    console.log('JSON parse error for CMS->CP:', e, match[1]);
+                    payloadData = match[1].trim();
+                }
+            }
+        } else if (message.includes('WebSocket Charger→CMS Frame:')) {
+            msgFlow = 'CP -> CMS';
+            // Extract JSON payload from WebSocket frame (could be multi-line formatted JSON)
+            const match = message.match(/WebSocket Charger→CMS Frame: (.*)/s);
+            if (match) {
+                try {
+                    // Handle both single-line and multi-line JSON
+                    let jsonStr = match[1].trim();
+                    // If it starts with [, it's likely a JSON array
+                    if (jsonStr.startsWith('[')) {
+                        jsonData = JSON.parse(jsonStr);
+                    } else {
+                        // Try to parse as-is first
+                        jsonData = JSON.parse(jsonStr);
+                    }
+                } catch (e) {
+                    console.log('JSON parse error for CP->CMS:', e, match[1]);
+                    payloadData = match[1].trim();
+                }
+            }
+        } else if (message.includes('send [')) {
+            msgFlow = 'CMS -> CP';
+            // Extract JSON payload from send message (legacy format)
             const match = message.match(/send \[(.*)\]/);
             if (match) {
-                payload = match[1];
+                try {
+                    jsonData = JSON.parse('[' + match[1] + ']');
+                } catch (e) {
+                    console.log('JSON parse error for send:', e, match[1]);
+                    payloadData = '[' + match[1] + ']';
+                }
             }
         } else if (message.includes('receive message [')) {
-            messagePath = 'Charger->CMS';
-            // Extract JSON payload from receive message
+            msgFlow = 'CP -> CMS';
+            // Extract JSON payload from receive message (legacy format)
             const match = message.match(/receive message \[(.*)\]/);
             if (match) {
-                payload = match[1];
+                try {
+                    jsonData = JSON.parse('[' + match[1] + ']');
+                } catch (e) {
+                    console.log('JSON parse error for receive:', e, match[1]);
+                    payloadData = '[' + match[1] + ']';
+                }
             }
-        } else {
-            // For other messages (like responses), try to extract any JSON-like content
-            messagePath = 'System';
-            payload = message;
+        }
+        
+        // Parse OCPP message structure if we have valid JSON
+        if (jsonData && Array.isArray(jsonData)) {
+            if (jsonData.length >= 2) {
+                // OCPP message format: [MessageType, UniqueId, Action, Payload]
+                // or [MessageType, UniqueId, Payload] for responses
+                const messageType = jsonData[0];
+                uniqueID = String(jsonData[1] || ''); // Convert to string to avoid extra quotes
+                
+                if (messageType === 2) {
+                    // CALL message: [2, UniqueId, Action, Payload]
+                    command = jsonData[2] || '';
+                    payloadData = jsonData[3] ? JSON.stringify(jsonData[3]) : '{}';
+                } else if (messageType === 3) {
+                    // CALLRESULT message: [3, UniqueId, Payload]
+                    // For confirmation messages, try to infer command from payload structure
+                    const payload = jsonData[2] || {};
+                    
+                    // Common OCPP confirmation patterns
+                    if (payload.hasOwnProperty('currentTime')) {
+                        command = 'HeartbeatConfirmation';
+                    } else if (payload.hasOwnProperty('status') && payload.hasOwnProperty('idTagInfo')) {
+                        command = 'AuthorizeConfirmation';
+                    } else if (payload.hasOwnProperty('status') && payload.hasOwnProperty('transactionId')) {
+                        command = 'StartTransactionConfirmation';
+                    } else if (payload.hasOwnProperty('idTagInfo') && !payload.hasOwnProperty('transactionId')) {
+                        command = 'StopTransactionConfirmation';
+                    } else if (Object.keys(payload).length === 0) {
+                        // Empty payload - most commonly MeterValuesConfirmation
+                        command = 'MeterValuesConfirmation';
+                    } else if (payload.hasOwnProperty('status')) {
+                        // Just status field - could be various confirmations
+                        command = 'StatusConfirmation';
+                    } else {
+                        command = 'Confirmation';
+                    }
+                    
+                    payloadData = jsonData[2] ? JSON.stringify(jsonData[2]) : '{}';
+                } else if (messageType === 4) {
+                    // CALLERROR message: [4, UniqueId, ErrorCode, ErrorDescription, ErrorDetails]
+                    command = 'Error';
+                    payloadData = JSON.stringify({
+                        errorCode: jsonData[2] || '',
+                        errorDescription: jsonData[3] || '',
+                        errorDetails: jsonData[4] || {}
+                    });
+                } else {
+                    // Unknown message type, but still include it
+                    command = 'Unknown';
+                    payloadData = JSON.stringify(jsonData);
+                }
+            }
+        }
+        
+        // If we don't have JSON data but have raw payload, use that
+        if (!jsonData && payloadData) {
+            command = 'Raw';
+            // payloadData is already set from the catch blocks
+        }
+        
+        // Skip entries that don't have any meaningful data
+        if (!msgFlow) {
+            return;
         }
         
         // Escape CSV values (handle commas and quotes)
         const escapeCSV = (value) => {
             if (typeof value !== 'string') value = String(value);
+            // Only escape if the value contains commas, quotes, or newlines
             if (value.includes(',') || value.includes('"') || value.includes('\n')) {
                 return '"' + value.replace(/"/g, '""') + '"';
             }
@@ -360,9 +491,10 @@ function downloadLogsCSV() {
         const row = [
             escapeCSV(selectedChargerId),
             escapeCSV(istTime),
-            escapeCSV(utcTime),
-            escapeCSV(messagePath),
-            escapeCSV(payload)
+            uniqueID,  // Don't escape uniqueID to avoid extra quotes
+            escapeCSV(msgFlow),
+            escapeCSV(command),
+            escapeCSV(payloadData)
         ];
         
         csvContent += row.join(',') + '\n';
@@ -439,9 +571,14 @@ function updateIdTagList(idTags) {
             <div class="card">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <h6 class="card-title">${idTag}</h6>
-                            ${expiryText}
+                        <div class="d-flex align-items-start gap-2">
+                            <div class="form-check mt-1">
+                                <input class="form-check-input idtag-checkbox" type="checkbox" value="${idTag}" id="checkbox-${idTag}" onchange="updateSelectedCount()">
+                            </div>
+                            <div>
+                                <h6 class="card-title mb-1">${idTag}</h6>
+                                ${expiryText}
+                            </div>
                         </div>
                         <div class="d-flex flex-column align-items-end gap-2">
                             <span class="badge ${badgeClass}">${info.status}</span>
@@ -463,15 +600,42 @@ function updateIdTagList(idTags) {
             select.appendChild(option);
         }
     });
+    
+    // Update selected count after loading
+    updateSelectedCount();
 }
 
 // Add new ID tag
+// Update character count for ID tag input
+function updateCharCount() {
+    const input = document.getElementById('newIdTag');
+    const counter = document.getElementById('charCount');
+    const currentLength = input.value.length;
+    
+    counter.textContent = `${currentLength}/20 characters`;
+    
+    // Change color based on remaining characters
+    if (currentLength >= 18) {
+        counter.className = 'text-warning';
+    } else if (currentLength === 20) {
+        counter.className = 'text-danger';
+    } else {
+        counter.className = 'text-muted';
+    }
+}
+
 async function addIdTag() {
     const idTag = document.getElementById('newIdTag').value.trim();
     const expiryDateTime = document.getElementById('newIdTagExpiry').value;
     
     if (!idTag) {
         alert('Please enter an ID tag');
+        return;
+    }
+    
+    // Validate ID tag length according to OCPP 1.6 specification (max 20 characters)
+    if (idTag.length > 20) {
+        alert(`ID tag is too long! Maximum length is 20 characters (OCPP 1.6 specification).\n\nCurrent length: ${idTag.length} characters\nPlease shorten the ID tag.`);
         return;
     }
 
@@ -497,6 +661,7 @@ async function addIdTag() {
         if (response.ok) {
             document.getElementById('newIdTag').value = '';
             document.getElementById('newIdTagExpiry').value = '';
+            updateCharCount(); // Reset character counter
             loadIdTags();
             alert('ID Tag added successfully!');
         } else {
@@ -530,6 +695,121 @@ async function deleteIdTag(idTag) {
     } catch (error) {
         console.error('Error deleting ID tag:', error);
         alert('Error deleting ID tag');
+    }
+}
+
+// Update selected count and button state
+function updateSelectedCount() {
+    const checkboxes = document.querySelectorAll('.idtag-checkbox');
+    const selectedCheckboxes = document.querySelectorAll('.idtag-checkbox:checked');
+    const selectedCount = selectedCheckboxes.length;
+    
+    // Update count display
+    document.getElementById('selectedCount').textContent = selectedCount;
+    
+    // Enable/disable delete button
+    const deleteBtn = document.getElementById('deleteSelectedBtn');
+    deleteBtn.disabled = selectedCount === 0;
+    
+    // Update select all button text
+    const selectAllBtn = document.getElementById('selectAllBtn');
+    if (selectedCount === checkboxes.length && checkboxes.length > 0) {
+        selectAllBtn.innerHTML = '<i class="bi bi-check-all"></i> All Selected';
+        selectAllBtn.classList.add('active');
+    } else {
+        selectAllBtn.innerHTML = '<i class="bi bi-check-all"></i> Select All';
+        selectAllBtn.classList.remove('active');
+    }
+}
+
+// Select all ID tags
+function selectAllIdTags() {
+    const checkboxes = document.querySelectorAll('.idtag-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = true;
+    });
+    updateSelectedCount();
+}
+
+// Deselect all ID tags
+function deselectAllIdTags() {
+    const checkboxes = document.querySelectorAll('.idtag-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    updateSelectedCount();
+}
+
+// Delete selected ID tags
+async function deleteSelectedIdTags() {
+    const selectedCheckboxes = document.querySelectorAll('.idtag-checkbox:checked');
+    const selectedIdTags = Array.from(selectedCheckboxes).map(cb => cb.value);
+    
+    if (selectedIdTags.length === 0) {
+        alert('No ID tags selected');
+        return;
+    }
+    
+    const confirmMessage = selectedIdTags.length === 1 
+        ? `Are you sure you want to delete the selected ID tag "${selectedIdTags[0]}"?`
+        : `Are you sure you want to delete ${selectedIdTags.length} selected ID tags?\n\nTags to delete:\n${selectedIdTags.join('\n')}`;
+    
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+    
+    // Show progress
+    const deleteBtn = document.getElementById('deleteSelectedBtn');
+    const originalText = deleteBtn.innerHTML;
+    deleteBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Deleting...';
+    deleteBtn.disabled = true;
+    
+    let successCount = 0;
+    let errorCount = 0;
+    const errors = [];
+    
+    try {
+        // Delete each ID tag
+        for (const idTag of selectedIdTags) {
+            try {
+                const response = await fetch(`/api/idtags/${encodeURIComponent(idTag)}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    successCount++;
+                } else {
+                    errorCount++;
+                    const errorData = await response.json();
+                    errors.push(`${idTag}: ${errorData.detail || 'Unknown error'}`);
+                }
+            } catch (error) {
+                errorCount++;
+                errors.push(`${idTag}: ${error.message}`);
+            }
+        }
+        
+        // Show results
+        let message = '';
+        if (successCount > 0) {
+            message += `Successfully deleted ${successCount} ID tag${successCount > 1 ? 's' : ''}`;
+        }
+        if (errorCount > 0) {
+            if (message) message += '\n\n';
+            message += `Failed to delete ${errorCount} ID tag${errorCount > 1 ? 's' : ''}:\n${errors.join('\n')}`;
+        }
+        
+        if (message) {
+            alert(message);
+        }
+        
+        // Reload the list
+        loadIdTags();
+        
+    } finally {
+        // Reset button
+        deleteBtn.innerHTML = originalText;
+        updateSelectedCount();
     }
 }
 
@@ -1027,6 +1307,7 @@ async function resetCharger(resetType) {
 async function sendLocalList() {
     const updateType = document.getElementById('localListUpdateType').value;
     const data = document.getElementById('localListData').value;
+    const forceStoreLocally = document.getElementById('forceStoreLocally').checked;
 
     try {
         const response = await fetch(`/api/send/${selectedChargerId}/send_local_list`, {
@@ -1036,19 +1317,47 @@ async function sendLocalList() {
             },
             body: JSON.stringify({
                 update_type: updateType,
-                local_authorization_list: data ? JSON.parse(data) : null
+                local_authorization_list: data ? JSON.parse(data) : null,
+                force_store_locally: forceStoreLocally
             })
         });
 
         if (response.ok) {
+            const result = await response.json();
             modals.sendLocalList.hide();
-            alert('Local list sent successfully');
+            
+            // Count the number of ID tags that were sent
+            let tagCount = 0;
+            if (data) {
+                try {
+                    const parsedData = JSON.parse(data);
+                    tagCount = Array.isArray(parsedData) ? parsedData.length : 0;
+                } catch (e) {
+                    tagCount = 0;
+                }
+            }
+            
+            // Check if the charger accepted the local list
+            if (result.response && result.response.status === 'Accepted') {
+                alert(`Local list sent successfully!\n\nCharger response: ${result.response.status}\n${tagCount > 0 ? `\n${tagCount} ID tags have been sent to the charger and stored locally.` : ''}`);
+            } else {
+                const status = result.response ? result.response.status : 'Unknown';
+                if (forceStoreLocally && tagCount > 0) {
+                    alert(`Local list sent but charger responded with: ${status}\n\nHowever, ${tagCount} ID tags have been stored locally as requested.`);
+                } else {
+                    alert(`Local list sent but charger responded with: ${status}\n\nID tags were not stored locally.`);
+                }
+            }
+            
+            // Refresh the ID tags list to show any newly added tags
+            loadIdTags();
         } else {
-            alert('Error sending local list');
+            const errorData = await response.json();
+            alert(`Error sending local list: ${errorData.detail || 'Unknown error'}`);
         }
     } catch (error) {
         console.error('Error sending local list:', error);
-        alert('Error sending local list');
+        alert('Error sending local list. Please check the JSON format and try again.');
     }
 }
 
@@ -1313,9 +1622,13 @@ function generateCustomRandomList(count = 10, validityDays = 1) {
     const expiryDate = new Date(now.getTime() + (validityDays * 24 * 60 * 60 * 1000));
     
     for (let i = 0; i < count; i++) {
-        // Generate random ID tag (mix of letters and numbers)
-        const randomId = 'TAG' + Math.random().toString(36).substring(2, 8).toUpperCase() + 
-                         Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+        // Generate random ID tag - exactly 20 characters as per OCPP 1.6 specification
+        // Format: TAG + 17 random alphanumeric characters = 20 total characters
+        let randomId = 'TAG';
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        for (let j = 0; j < 17; j++) {
+            randomId += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
         
         tags.push({
             idTag: randomId,
@@ -1332,12 +1645,107 @@ function generateCustomRandomList(count = 10, validityDays = 1) {
         localListTextarea.value = JSON.stringify(tags, null, 2);
         
         // Show success message
-        alert(`Generated ${count} random ID tags with ${validityDays} day validity!\n\nTags are now loaded in the Send Local List dialog. You can review and modify them before sending.\n\nGenerated tags: ${tags.map(t => t.idTag).join(', ')}`);
+        alert(`Generated ${count} random 20-character ID tags with ${validityDays} day validity (OCPP 1.6 compliant)!\n\nTags are now loaded in the Send Local List dialog. You can review and modify them before sending.\n\nGenerated tags: ${tags.map(t => t.idTag).join(', ')}`);
         
         // Also log to console for debugging
         console.log('Generated random local list:', tags);
     } else {
         console.error('Local list textarea not found');
         alert('Error: Could not find the local list input field.');
+    }
+}
+
+// TriggerMessage functions
+function showTriggerMessageModal() {
+    if (!selectedChargerId) {
+        alert('Please select a charger first');
+        return;
+    }
+    
+    // Reset form
+    document.getElementById('triggerMessageType').value = '';
+    document.getElementById('triggerMessageConnectorId').value = '';
+    document.getElementById('triggerMessageBtn').disabled = true;
+    
+    // Show modal
+    modals.triggerMessage = new bootstrap.Modal(document.getElementById('triggerMessageModal'));
+    modals.triggerMessage.show();
+    
+    // Add event listener for message type selection
+    document.getElementById('triggerMessageType').addEventListener('change', function() {
+        const messageType = this.value;
+        const connectorIdField = document.getElementById('triggerMessageConnectorId');
+        const triggerBtn = document.getElementById('triggerMessageBtn');
+        
+        if (messageType) {
+            triggerBtn.disabled = false;
+            
+            // Show/hide connector ID field based on message type
+            if (messageType === 'StatusNotification' || messageType === 'MeterValues') {
+                connectorIdField.required = true;
+                connectorIdField.parentElement.style.display = 'block';
+            } else {
+                connectorIdField.required = false;
+                connectorIdField.value = '';
+            }
+        } else {
+            triggerBtn.disabled = true;
+        }
+    });
+}
+
+async function sendTriggerMessage() {
+    const messageType = document.getElementById('triggerMessageType').value;
+    const connectorId = document.getElementById('triggerMessageConnectorId').value;
+    
+    if (!messageType) {
+        alert('Please select a message type');
+        return;
+    }
+    
+    // Validate connector ID for specific message types
+    if ((messageType === 'StatusNotification' || messageType === 'MeterValues') && !connectorId) {
+        alert('Connector ID is required for StatusNotification and MeterValues');
+        return;
+    }
+    
+    try {
+        const requestBody = {
+            requested_message: messageType
+        };
+        
+        if (connectorId) {
+            requestBody.connector_id = parseInt(connectorId);
+        }
+        
+        const response = await fetch(`/api/send/${selectedChargerId}/trigger_message`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestBody)
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            modals.triggerMessage.hide();
+            
+            // Show success message with response details
+            let message = `TriggerMessage sent successfully!\n\nMessage Type: ${messageType}`;
+            if (connectorId) {
+                message += `\nConnector ID: ${connectorId}`;
+            }
+            if (result.response) {
+                message += `\n\nCharger Response: ${JSON.stringify(result.response, null, 2)}`;
+            }
+            
+            alert(message);
+        } else {
+            const error = await response.json();
+            alert(`Failed to send TriggerMessage: ${error.detail}`);
+        }
+    } catch (error) {
+        console.error('Error sending TriggerMessage:', error);
+        alert('Failed to send TriggerMessage. Please try again.');
     }
 } 

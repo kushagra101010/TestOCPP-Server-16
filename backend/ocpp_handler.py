@@ -98,10 +98,10 @@ class ChargePoint(BaseChargePoint):
             # Add log entry
             charger_store.add_log(self.charge_point_id, "Heartbeat received")
             
-            # Update last seen timestamp
+            # Update last heartbeat timestamp
             charger = db.session.query(Charger).filter_by(charge_point_id=self.charge_point_id).first()
             if charger:
-                charger.last_seen = datetime.utcnow()
+                charger.last_heartbeat = datetime.utcnow()
                 db.session.commit()
             
             return call_result.Heartbeat(
@@ -206,6 +206,36 @@ class ChargePoint(BaseChargePoint):
             )
         except Exception as e:
             logger.error(f"Error in DataTransfer handler: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+
+    @on('FirmwareStatusNotification')
+    async def on_firmware_status_notification(self, status: str, **kwargs):
+        try:
+            logger.info(f"Firmware status notification from {self.charge_point_id}: status={status}")
+            
+            # Add log entry
+            charger_store.add_log(self.charge_point_id, f"FirmwareStatusNotification: status={status}")
+            
+            return call_result.FirmwareStatusNotification()
+        except Exception as e:
+            logger.error(f"Error in FirmwareStatusNotification handler: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+
+    @on('DiagnosticsStatusNotification')
+    async def on_diagnostics_status_notification(self, status: str, **kwargs):
+        try:
+            logger.info(f"Diagnostics status notification from {self.charge_point_id}: status={status}")
+            
+            # Add log entry
+            charger_store.add_log(self.charge_point_id, f"DiagnosticsStatusNotification: status={status}")
+            
+            return call_result.DiagnosticsStatusNotification()
+        except Exception as e:
+            logger.error(f"Error in DiagnosticsStatusNotification handler: {e}")
             import traceback
             traceback.print_exc()
             raise
@@ -354,4 +384,41 @@ class ChargePoint(BaseChargePoint):
             return await self.call(request)
         except Exception as e:
             logger.error(f"Error sending Reset: {e}")
+            return None
+
+    async def trigger_message(self, requested_message: str, connector_id: int = None):
+        """Send TriggerMessage request to charger."""
+        try:
+            # Validate requested message type
+            valid_messages = [
+                "BootNotification", "DiagnosticsStatusNotification", "FirmwareStatusNotification",
+                "Heartbeat", "MeterValues", "StatusNotification"
+            ]
+            
+            if requested_message not in valid_messages:
+                raise ValueError(f"Invalid message type. Must be one of: {', '.join(valid_messages)}")
+            
+            # Add log entry
+            log_msg = f"Sending TriggerMessage request: requested_message={requested_message}"
+            if connector_id is not None:
+                log_msg += f", connector_id={connector_id}"
+            charger_store.add_log(self.charge_point_id, log_msg)
+            
+            logger.info(f"Sending TriggerMessage to {self.charge_point_id}: {requested_message}")
+            
+            # Create TriggerMessage request - use string directly as OCPP 2.0.0 library expects
+            if connector_id is not None:
+                request = call.TriggerMessage(requested_message=requested_message, connector_id=int(connector_id))
+            else:
+                request = call.TriggerMessage(requested_message=requested_message)
+            
+            response = await self.call(request)
+            
+            # Add log entry for response
+            charger_store.add_log(self.charge_point_id, f"TriggerMessage response: {response}")
+            
+            return response
+        except Exception as e:
+            logger.error(f"Error sending TriggerMessage to {self.charge_point_id}: {e}")
+            charger_store.add_log(self.charge_point_id, f"TriggerMessage failed: {str(e)}")
             return None 
