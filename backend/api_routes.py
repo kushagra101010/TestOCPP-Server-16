@@ -320,6 +320,10 @@ class ChangeConfigurationRequest(BaseModel):
 class ResetRequest(BaseModel):
     type: str  # "hard" or "soft"
 
+class TriggerMessageRequest(BaseModel):
+    requested_message: str  # Message type to trigger
+    connector_id: Optional[int] = None  # Optional connector ID
+
 @router.post("/api/send/{charge_point_id}/change_configuration")
 async def change_configuration(charge_point_id: str, request: ChangeConfigurationRequest):
     """Send ChangeConfiguration request."""
@@ -356,6 +360,33 @@ async def reset_charger(charge_point_id: str, request: ResetRequest):
     
     try:
         response = await charge_points[charge_point_id].reset(request.type)
+        return {"status": "success", "response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/send/{charge_point_id}/trigger_message")
+async def trigger_message(charge_point_id: str, request: TriggerMessageRequest):
+    """Send TriggerMessage request."""
+    if charge_point_id not in charge_points:
+        raise HTTPException(status_code=404, detail="Charger not connected")
+    
+    # Validate requested message type
+    valid_messages = [
+        "BootNotification", "DiagnosticsStatusNotification", "FirmwareStatusNotification",
+        "Heartbeat", "MeterValues", "StatusNotification"
+    ]
+    
+    if request.requested_message not in valid_messages:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid message type. Must be one of: {', '.join(valid_messages)}"
+        )
+    
+    try:
+        response = await charge_points[charge_point_id].trigger_message(
+            request.requested_message, 
+            request.connector_id
+        )
         return {"status": "success", "response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
