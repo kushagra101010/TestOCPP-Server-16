@@ -97,23 +97,12 @@ function updateChargerList(chargers) {
         item.className = `list-group-item list-group-item-action ${charger.id === selectedChargerId ? 'active' : ''}`;
         item.style.cursor = 'pointer';
         
-        // Get connector status
-        let connectorStatus = 'Available';
-        if (charger.connector_status && typeof charger.connector_status === 'object') {
-            // Find the first connector status
-            for (const [key, value] of Object.entries(charger.connector_status)) {
-                if (key.startsWith('connector_') && value && typeof value === 'object' && value.status) {
-                    connectorStatus = value.status;
-                    break;
-                }
-            }
-        }
-        
-        // Get status display and charging indicator
-        let statusDisplay = charger.connected ? (connectorStatus || 'Connected') : 'Disconnected';
+        // Use the main charger status (from StatusNotification) - this is the primary status
+        let statusDisplay = charger.status || 'Unknown';
         let statusClass = charger.connected ? 'bg-success' : 'bg-danger';
         
-        const isCharging = connectorStatus && ['charging', 'preparing'].includes(connectorStatus.toLowerCase());
+        // Check if charger is in a charging state based on the main status
+        const isCharging = statusDisplay && ['charging', 'preparing'].includes(statusDisplay.toLowerCase());
         const chargingIndicator = isCharging ? '<i class="bi bi-lightning-charge-fill text-warning"></i> ' : '';
         const transactionInfo = isCharging ? '<br><small class="text-warning"><i class="bi bi-info-circle"></i> Active transaction</small>' : '';
         

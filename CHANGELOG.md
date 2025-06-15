@@ -5,6 +5,38 @@ All notable changes to this OCPP 1.6 Server project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] - 2025-01-15
+
+### 🔧 Bug Fixes - Status Display Accuracy
+
+This is a patch release that fixes critical status display issues where charger status was not properly following OCPP StatusNotification messages.
+
+### 🐛 Fixed
+- **Status Display Logic**: Fixed charger status display to properly follow StatusNotification messages instead of showing default "Available"
+- **Real-time Status Updates**: Charger status now accurately reflects OCPP StatusNotification states (Available, Preparing, Charging, SuspendedEV, etc.)
+- **Connection vs Status Logic**: Improved status logic to show "Disconnected" only when WebSocket connection is lost, not as default status
+- **Frontend Display Bug**: Fixed UI JavaScript to correctly display actual charger status from API instead of ignoring it
+
+### 🔄 Technical Changes
+- **Backend**: Removed conflicting status updates from connection/disconnection events
+- **ChargerStore**: Modified `add_charger()` method to preserve existing StatusNotification status
+- **API Routes**: Enhanced status logic for proper WebSocket connectivity handling  
+- **Frontend**: Updated JavaScript to use main `charger.status` field instead of `connector_status`
+
+### 🧪 Testing
+- **Status Accuracy**: Verified charger status correctly shows "Preparing" when in preparing state
+- **Connection Handling**: Confirmed "Disconnected" only shows when WebSocket is actually lost
+- **UI Consistency**: Tested frontend displays match backend API responses
+- **Real-time Updates**: Verified status changes immediately reflect in UI
+
+### 📋 Impact
+- **User Experience**: Users now see accurate real-time charger status instead of misleading "Available" 
+- **OCPP Compliance**: Better adherence to OCPP 1.6 protocol for status handling
+- **Debugging**: Easier troubleshooting with accurate status information
+- **Transaction Management**: Better visibility into charging session states
+
+---
+
 ## [2.1.0] - 2025-01-15
 
 ### 🔔 Enhanced TriggerMessage Support
