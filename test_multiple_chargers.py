@@ -22,11 +22,17 @@ class ChargePoint(cp):
         )
         response = await self.call(request)
         logger.info(f"{self.charger_id}: BootNotification response: {response}")
+        
+        # Extract heartbeat interval from response
+        self.heartbeat_interval = getattr(response, 'interval', 300)  # Default to 300 seconds if not provided
+        logger.info(f"{self.charger_id}: Heartbeat interval set to {self.heartbeat_interval} seconds")
+        return response
 
     async def send_heartbeat(self):
         request = call.Heartbeat()
         response = await self.call(request)
         logger.info(f"{self.charger_id}: Heartbeat response: {response}")
+        return response
 
     async def send_status_notification(self):
         request = call.StatusNotification(
@@ -37,8 +43,8 @@ class ChargePoint(cp):
         response = await self.call(request)
         logger.info(f"{self.charger_id}: StatusNotification response: {response}")
 
-async def run_charger(charger_id, duration=60):
-    """Run a single charger for the specified duration."""
+async def run_charger(charger_id):
+    """Run a single charger continuously."""
     uri = f"ws://localhost:8000/ws/{charger_id}"
     
     try:
@@ -53,38 +59,37 @@ async def run_charger(charger_id, duration=60):
             # Start the charge point
             await asyncio.gather(
                 charge_point.start(),
-                run_charger_operations(charge_point, duration)
+                run_charger_operations(charge_point)
             )
             
     except Exception as e:
         logger.error(f"{charger_id}: Connection failed: {e}")
 
-async def run_charger_operations(charge_point, duration):
+async def run_charger_operations(charge_point):
     """Run charger operations (boot, status, heartbeats)."""
     try:
-        # Send boot notification
+        # Send boot notification and get heartbeat interval
         await charge_point.send_boot_notification()
         
         # Send status notification
         await charge_point.send_status_notification()
         
-        # Send heartbeats every 10 seconds for the duration
-        end_time = asyncio.get_event_loop().time() + duration
-        while asyncio.get_event_loop().time() < end_time:
+        # Send heartbeats continuously using the interval from boot notification response
+        while True:
+            await asyncio.sleep(charge_point.heartbeat_interval)
             await charge_point.send_heartbeat()
-            await asyncio.sleep(10)
             
     except Exception as e:
         logger.error(f"{charge_point.charger_id}: Operations failed: {e}")
 
 async def test_multiple_chargers():
     """Test multiple chargers connecting simultaneously."""
-    charger_ids = [f"CHARGER_{i:03d}" for i in range(1, 6)]  # 5 chargers
+    charger_ids = [f"CHARGER_{i:03d}" for i in range(1, 21)]  # 20 chargers
     
     logger.info(f"Starting {len(charger_ids)} chargers simultaneously...")
     
     # Start all chargers concurrently
-    tasks = [run_charger(charger_id, 30) for charger_id in charger_ids]  # Run for 30 seconds
+    tasks = [run_charger(charger_id) for charger_id in charger_ids]  # Run continuously
     
     try:
         await asyncio.gather(*tasks, return_exceptions=True)

@@ -5,6 +5,44 @@ All notable changes to this OCPP 1.6 Server project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2025-01-16
+
+### 🎨 UI/UX Improvements - Enhanced Charger Management
+
+This is a minor release that introduces significant UI improvements for better charger management and enhanced multi-charger testing capabilities.
+
+### ✨ Added
+- **Vertical Scrolling**: Fixed-height charger list that displays 5 chargers at a time with smooth scrolling
+- **Enhanced Visual Design**: Improved spacing, padding, and visual hierarchy for charger status items
+- **Professional Styling**: Better borders, badges, and typography for a more polished interface
+- **Scalable Interface**: UI now gracefully handles large numbers of connected chargers (tested with 20+)
+
+### 🔧 Enhanced
+- **Multi-Charger Testing**: Updated `test_multiple_chargers.py` to support 20 concurrent chargers instead of 5
+- **OCPP-Compliant Heartbeats**: Heartbeat intervals now properly follow server response from BootNotification
+- **Continuous Operation**: Test chargers now run indefinitely with proper heartbeat cycles
+- **Server-Controlled Timing**: Heartbeat intervals dynamically set by server response instead of hardcoded 10 seconds
+
+### 🎯 Technical Improvements
+- **UI Container**: Added `max-height: 400px` to charger list for exactly 5 visible chargers
+- **CSS Enhancements**: Improved padding (`12px 16px`), margins, and border radius (`8px`) for list items
+- **Badge Styling**: Consistent badge sizing (`min-width: 90px`) and better visual presentation
+- **Heartbeat Logic**: Enhanced heartbeat interval extraction from BootNotification response with 300s default
+
+### 🧪 Testing
+- **Multi-Charger Scale**: Tested with 20 concurrent charger connections
+- **UI Responsiveness**: Verified proper scrolling and display with large charger lists
+- **OCPP Compliance**: Confirmed heartbeat behavior follows OCPP 1.6 specification
+- **Continuous Operation**: Validated persistent WebSocket connections without timeouts
+
+### 📋 Impact
+- **Better Scalability**: UI can now handle large numbers of charging stations efficiently
+- **Improved UX**: Professional appearance with better information hierarchy
+- **Enhanced Testing**: Better tools for testing multi-charger deployment scenarios
+- **OCPP Compliance**: More accurate implementation of heartbeat interval management
+
+---
+
 ## [2.1.1] - 2025-01-15
 
 ### 🔧 Bug Fixes - Status Display Accuracy

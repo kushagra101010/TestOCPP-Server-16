@@ -1,12 +1,19 @@
-# OCPP 1.6 Server v2.1.1 - Central Management System
+# OCPP 1.6 Server v2.2.0 - Central Management System
 
 Professional OCPP 1.6 Central Management System (CMS) for EV charging stations with web-based dashboard and real-time monitoring.
 
-![OCPP Server](https://img.shields.io/badge/OCPP-1.6-blue) ![Version](https://img.shields.io/badge/Version-2.1.1-green) ![Python](https://img.shields.io/badge/Python-3.8+-green) ![License](https://img.shields.io/badge/License-MIT-yellow)
+![OCPP Server](https://img.shields.io/badge/OCPP-1.6-blue) ![Version](https://img.shields.io/badge/Version-2.2.0-green) ![Python](https://img.shields.io/badge/Python-3.8+-green) ![License](https://img.shields.io/badge/License-MIT-yellow)
 
-## 🎉 What's New in v2.1.1
+## 🎉 What's New in v2.2.0
 
-### Latest Updates (v2.1.1)
+### Latest Updates (v2.2.0)
+- **🎨 Enhanced UI Design**: Improved charger list with better spacing, professional styling, and visual hierarchy
+- **📏 Vertical Scrolling**: Fixed-height charger list displays 5 chargers at a time with smooth scrolling
+- **⚖️ Better Scalability**: UI now gracefully handles large numbers of connected chargers (tested with 20+)
+- **🔄 OCPP-Compliant Heartbeats**: Heartbeat intervals now properly follow server response from BootNotification
+- **🧪 Enhanced Testing**: Updated multi-charger testing to support 20 concurrent connections with continuous operation
+
+### Previous Updates (v2.1.1)
 - **🔧 Status Display Fix**: Fixed charger status display to properly follow StatusNotification messages
 - **⚡ Real-time Status**: Charger status now accurately reflects OCPP StatusNotification (Available, Preparing, Charging, etc.)
 - **🔄 Connection Logic**: Improved status logic to show "Disconnected" only when WebSocket is actually disconnected
@@ -24,7 +31,7 @@ Professional OCPP 1.6 Central Management System (CMS) for EV charging stations w
 - **⚡ Improved Performance**: Better error handling and logging throughout the system
 - **🔄 Dependency Updates**: All packages updated to latest stable versions
 
-**Note**: This is **OCPP 1.6 Server software version 2.1.1** - it implements the OCPP 1.6 protocol, not OCPP 2.0.1 protocol.
+**Note**: This is **OCPP 1.6 Server software version 2.2.0** - it implements the OCPP 1.6 protocol, not OCPP 2.0.1 protocol.
 
 ## 🚀 Quick Start
 
@@ -142,7 +149,7 @@ The server supports both types of OCPP 1.6 reset operations:
 ## 🔧 File Structure
 
 ```
-OCPP_1.6_Server_v2.1.1/
+OCPP_1.6_Server_v2.2.0/
 ├── setup.bat              # One-time installation script
 ├── start_server.bat        # Start the OCPP server
 ├── demo_charger.bat        # Run demo charger for testing

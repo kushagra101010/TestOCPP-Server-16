@@ -53,6 +53,40 @@
         .charger-select {
             margin-bottom: 1rem;
         }
+        
+        /* Charger list styling with fixed height and scroll */
+        #chargerList {
+            max-height: 400px; /* Approximately 5 chargers at ~80px each */
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+        
+        /* Improve charger list item spacing */
+        #chargerList .list-group-item {
+            padding: 12px 16px;
+            margin-bottom: 2px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        
+        /* Better spacing for charger info */
+        #chargerList .list-group-item h6 {
+            margin-bottom: 6px;
+            font-weight: 600;
+        }
+        
+        #chargerList .list-group-item small {
+            display: block;
+            margin-bottom: 2px;
+            line-height: 1.3;
+        }
+        
+        /* Improve badge positioning */
+        #chargerList .badge {
+            min-width: 90px;
+            padding: 6px 10px;
+            font-size: 0.75rem;
+        }
     </style>
 </head>
 <body>
