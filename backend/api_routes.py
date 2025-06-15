@@ -1,0 +1,506 @@
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, Request, Response
+from typing import List, Dict, Optional
+from pydantic import BaseModel
+import json
+import logging
+from datetime import datetime
+import traceback
+
+from .charger_store import charger_store
+from .ocpp_handler import ChargePoint
+from .database import db
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+# Pydantic models for request/response validation
+class IdTagRequest(BaseModel):
+    id_tag: str
+    status: str = "Accepted"
+    expiry_date: Optional[str] = None
+
+class RemoteStartRequest(BaseModel):
+    id_tag: str
+    connector_id: Optional[int] = None
+
+class RemoteStopRequest(BaseModel):
+    transaction_id: int
+
+class DataTransferRequest(BaseModel):
+    vendor_id: str
+    message_id: Optional[str] = None
+    data: Optional[str] = None
+
+class DataTransferPacketRequest(BaseModel):
+    name: str
+    vendor_id: str
+    message_id: Optional[str] = None
+    data: Optional[str] = None
+
+class LocalListRequest(BaseModel):
+    update_type: str  # "Full" or "Differential"
+    local_authorization_list: Optional[List[Dict]] = None
+
+# Store active WebSocket connections
+charge_points: Dict[str, ChargePoint] = {}
+
+class WebSocketAdapter:
+    """Adapter to make FastAPI WebSocket compatible with ocpp library's WebSocket interface."""
+    def __init__(self, websocket: WebSocket, charge_point_id: str):
+        self.websocket = websocket
+        self.charge_point_id = charge_point_id
+        self._closed = False
+
+    async def send(self, message: str):
+        """Send a message to the WebSocket."""
+        if not self._closed:
+            # Log complete WebSocket frame being sent
+            try:
+                parsed_msg = json.loads(message)
+                charger_store.add_log(self.charge_point_id, f"WebSocket CMS→Charger Frame: {json.dumps(parsed_msg, indent=2)}")
+            except:
+                charger_store.add_log(self.charge_point_id, f"WebSocket CMS→Charger Frame: {message}")
+            await self.websocket.send_text(message)
+
+    async def recv(self) -> str:
+        """Receive a message from the WebSocket."""
+        if not self._closed:
+            try:
+                message = await self.websocket.receive_text()
+                # Log complete WebSocket frame received
+                try:
+                    parsed_msg = json.loads(message)
+                    charger_store.add_log(self.charge_point_id, f"WebSocket Charger→CMS Frame: {json.dumps(parsed_msg, indent=2)}")
+                except:
+                    charger_store.add_log(self.charge_point_id, f"WebSocket Charger→CMS Frame: {message}")
+                return message
+            except WebSocketDisconnect:
+                self._closed = True
+                raise
+        raise Exception("WebSocket is closed")
+
+    async def close(self):
+        """Close the WebSocket connection."""
+        if not self._closed:
+            self._closed = True
+            await self.websocket.close()
+
+    @property
+    def closed(self) -> bool:
+        """Check if the WebSocket is closed."""
+        return self._closed
+
+    @property
+    def subprotocol(self) -> str:
+        """Get the WebSocket subprotocol."""
+        return "ocpp1.6"
+
+@router.get("/ocpp16/{charge_point_id}")
+async def ocpp_handshake(charge_point_id: str, request: Request):
+    """Handle OCPP 1.6 handshake request."""
+    logger.info(f"Received OCPP handshake request from {charge_point_id}")
+    
+    # Check if WebSocket upgrade is requested
+    if "upgrade" in request.headers and request.headers["upgrade"].lower() == "websocket":
+        # Return 101 Switching Protocols
+        return Response(
+            status_code=101,
+            headers={
+                "Upgrade": "websocket",
+                "Connection": "Upgrade",
+                "Sec-WebSocket-Accept": "accepted"
+            }
+        )
+    else:
+        raise HTTPException(status_code=400, detail="WebSocket upgrade required")
+
+@router.websocket("/ws/{charge_point_id}")
+async def websocket_endpoint(websocket: WebSocket, charge_point_id: str):
+    """WebSocket endpoint for OCPP connections."""
+    try:
+        # Ensure charger exists in database FIRST
+        from .database import Charger
+        charger = db.session.query(Charger).filter_by(charge_point_id=charge_point_id).first()
+        if not charger:
+            # Add new charger to database if it doesn't exist
+            charger_store.add_charger(charge_point_id)
+        
+        # Log HTTP handshake details BEFORE accepting
+        headers = dict(websocket.headers)
+        client_info = {
+            "client_ip": websocket.client.host if websocket.client else "unknown",
+            "client_port": websocket.client.port if websocket.client else "unknown",
+            "headers": headers,
+            "path": f"/ws/{charge_point_id}",
+            "method": "GET",
+            "protocol": "HTTP/1.1"
+        }
+        charger_store.add_log(charge_point_id, f"HTTP Charger→CMS WebSocket Handshake Request:\n{json.dumps(client_info, indent=2)}")
+        logger.info(f"WebSocket handshake request from {charge_point_id}: {headers}")
+        
+        # Accept the WebSocket connection with OCPP subprotocol
+        try:
+            await websocket.accept(subprotocol="ocpp1.6")
+        except Exception as e:
+            logger.warning(f"Failed to accept with subprotocol, trying without: {e}")
+            await websocket.accept()
+        
+        # Log handshake response
+        response_info = {
+            "status": "101 Switching Protocols",
+            "upgrade": "websocket", 
+            "connection": "Upgrade",
+            "sec-websocket-protocol": "ocpp1.6",
+            "server": "FastAPI-OCPP-CMS"
+        }
+        charger_store.add_log(charge_point_id, f"HTTP CMS→Charger WebSocket Handshake Response:\n{json.dumps(response_info, indent=2)}")
+        logger.info(f"WebSocket connection accepted for {charge_point_id}")
+        
+        # Create adapter for the WebSocket
+        ws_adapter = WebSocketAdapter(websocket, charge_point_id)
+        
+        # Create charge point instance
+        charge_point = ChargePoint(charge_point_id, ws_adapter)
+        charge_points[charge_point_id] = charge_point
+        logger.info(f"Added {charge_point_id} to charge_points. Current connections: {list(charge_points.keys())}")
+        
+        # Update charger status in database
+        charger = db.session.query(Charger).filter_by(charge_point_id=charge_point_id).first()
+        if charger:
+            charger.status = "Connected"
+            charger.last_heartbeat = datetime.utcnow()
+            db.session.commit()
+            logger.info(f"Updated database status for {charge_point_id}: Connected")
+        
+        try:
+            # Start the charge point
+            await charge_point.start()
+        except WebSocketDisconnect:
+            logger.info(f"WebSocket disconnected for {charge_point_id}")
+        except Exception as e:
+            logger.error(f"Error in WebSocket connection for {charge_point_id}: {e}")
+            logger.error(traceback.format_exc())
+        finally:
+            # Clean up
+            logger.info(f"WebSocket cleanup for {charge_point_id}. Before cleanup: {list(charge_points.keys())}")
+            if charge_point_id in charge_points:
+                del charge_points[charge_point_id]
+                logger.info(f"Removed {charge_point_id} from charge_points. After cleanup: {list(charge_points.keys())}")
+            
+            # Update charger status in database only if no other WebSocket connection exists
+            # This prevents race conditions during reconnections
+            if charge_point_id not in charge_points:
+                charger = db.session.query(Charger).filter_by(charge_point_id=charge_point_id).first()
+                if charger:
+                    charger.status = "Disconnected"
+                    db.session.commit()
+                    logger.info(f"Updated database status for {charge_point_id}: Disconnected")
+            else:
+                logger.info(f"Not marking {charge_point_id} as disconnected - another WebSocket connection exists")
+                
+            await ws_adapter.close()
+    except Exception as e:
+        logger.error(f"Exception during WebSocket accept or setup for {charge_point_id}: {e}")
+        logger.error(traceback.format_exc())
+        raise
+
+@router.get("/api/logs/{charge_point_id}")
+async def get_logs(charge_point_id: str):
+    """Get logs for a specific charger."""
+    return charger_store.get_logs(charge_point_id)
+
+@router.post("/api/logs/{charge_point_id}/clear")
+async def clear_logs(charge_point_id: str):
+    """Clear logs for a specific charger."""
+    charger_store.clear_logs(charge_point_id)
+    return {"message": f"Logs cleared for charger {charge_point_id}"}
+
+@router.get("/api/chargers")
+async def get_chargers():
+    """Get list of chargers from the database."""
+    from .database import Charger
+    logger.debug("Getting chargers from database...")
+    chargers = db.session.query(Charger).all()
+    logger.debug(f"Found {len(chargers)} chargers in database")
+    
+    # Check active WebSocket connections - this is the primary indicator of connectivity
+    result = []
+    charger_ids_in_db = set()
+    
+    # Log current WebSocket connections for debugging
+    logger.info(f"Current active WebSocket connections: {list(charge_points.keys())}")
+    
+    # Process chargers from database
+    for charger in chargers:
+        logger.debug(f"Processing charger: {charger.charge_point_id}, status: {charger.status}")
+        charger_ids_in_db.add(charger.charge_point_id)
+        is_ws_connected = charger.charge_point_id in charge_points
+        logger.info(f"Charger {charger.charge_point_id}: WebSocket connected = {is_ws_connected}")
+        
+        # A charger is considered connected if it has an active WebSocket connection
+        # This ensures UI shows "connected" immediately when any WebSocket packet is received
+        charger_data = {
+            "id": charger.charge_point_id,
+            "status": charger.status,
+            "last_seen": charger.last_heartbeat.isoformat() if charger.last_heartbeat else None,
+            "connected": is_ws_connected  # Primary indicator: active WebSocket connection
+        }
+        result.append(charger_data)
+        logger.info(f"Charger {charger.charge_point_id} data: {charger_data}")
+    
+    # Also include chargers with active WebSocket connections that aren't in database yet
+    for charge_point_id in charge_points:
+        if charge_point_id not in charger_ids_in_db:
+            logger.debug(f"Found WebSocket-only charger: {charge_point_id}")
+            charger_data = {
+                "id": charge_point_id,
+                "status": "Connected",  # Default status for WebSocket-only chargers
+                "last_seen": None,
+                "connected": True  # Has active WebSocket connection
+            }
+            result.append(charger_data)
+    
+    logger.debug(f"Returning {len(result)} chargers")
+    return {"chargers": result}
+
+@router.post("/api/send/{charge_point_id}/remote_start")
+async def remote_start_transaction(charge_point_id: str, request: RemoteStartRequest):
+    """Send RemoteStartTransaction request."""
+    if charge_point_id not in charge_points:
+        raise HTTPException(status_code=404, detail="Charger not connected")
+    
+    try:
+        logger.info(f"Sending remote start to {charge_point_id} with id_tag={request.id_tag}, connector_id={request.connector_id}")
+        response = await charge_points[charge_point_id].remote_start_transaction(request.connector_id, request.id_tag)
+        logger.info(f"Remote start response from {charge_point_id}: {response}")
+        return {"status": "success", "response": response}
+    except Exception as e:
+        logger.error(f"Remote start error for {charge_point_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/send/{charge_point_id}/remote_stop")
+async def remote_stop_transaction(charge_point_id: str, request: RemoteStopRequest):
+    """Send RemoteStopTransaction request."""
+    if charge_point_id not in charge_points:
+        raise HTTPException(status_code=404, detail="Charger not connected")
+    
+    try:
+        response = await charge_points[charge_point_id].remote_stop_transaction(request.transaction_id)
+        return {"status": "success", "response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/send/{charge_point_id}/get_configuration")
+async def get_configuration(charge_point_id: str, keys: Optional[List[str]] = None):
+    """Send GetConfiguration request."""
+    if charge_point_id not in charge_points:
+        raise HTTPException(status_code=404, detail="Charger not connected")
+    
+    try:
+        response = await charge_points[charge_point_id].get_configuration(keys)
+        return {"status": "success", "response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ChangeConfigurationRequest(BaseModel):
+    key: str
+    value: str
+
+class ResetRequest(BaseModel):
+    type: str  # "hard" or "soft"
+
+@router.post("/api/send/{charge_point_id}/change_configuration")
+async def change_configuration(charge_point_id: str, request: ChangeConfigurationRequest):
+    """Send ChangeConfiguration request."""
+    if charge_point_id not in charge_points:
+        raise HTTPException(status_code=404, detail="Charger not connected")
+    
+    try:
+        response = await charge_points[charge_point_id].change_configuration(request.key, request.value)
+        return {"status": "success", "response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/send/{charge_point_id}/clear_cache")
+async def clear_cache(charge_point_id: str):
+    """Send ClearCache request."""
+    if charge_point_id not in charge_points:
+        raise HTTPException(status_code=404, detail="Charger not connected")
+    
+    try:
+        response = await charge_points[charge_point_id].clear_cache()
+        return {"status": "success", "response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/send/{charge_point_id}/reset")
+async def reset_charger(charge_point_id: str, request: ResetRequest):
+    """Send Reset request."""
+    if charge_point_id not in charge_points:
+        raise HTTPException(status_code=404, detail="Charger not connected")
+    
+    # Validate reset type
+    if request.type.lower() not in ["hard", "soft"]:
+        raise HTTPException(status_code=400, detail="Reset type must be 'hard' or 'soft'")
+    
+    try:
+        response = await charge_points[charge_point_id].reset(request.type)
+        return {"status": "success", "response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/send/{charge_point_id}/send_local_list")
+async def send_local_list(charge_point_id: str, request: LocalListRequest):
+    """Send SendLocalList request."""
+    if charge_point_id not in charge_points:
+        raise HTTPException(status_code=404, detail="Charger not connected")
+    
+    try:
+        list_version = charger_store.increment_local_auth_list_version()
+        response = await charge_points[charge_point_id].send_local_list(
+            list_version=list_version,
+            update_type=request.update_type,
+            local_authorization_list=request.local_authorization_list
+        )
+        return {"status": "success", "response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/send/{charge_point_id}/clear_local_list")
+async def clear_local_list(charge_point_id: str):
+    """Send ClearLocalList request (implemented as SendLocalList with empty list)."""
+    if charge_point_id not in charge_points:
+        raise HTTPException(status_code=404, detail="Charger not connected")
+    
+    try:
+        logger.info(f"Clearing local list for {charge_point_id}")
+        response = await charge_points[charge_point_id].clear_local_list()
+        logger.info(f"Clear local list response from {charge_point_id}: {response}")
+        return {"status": "success", "response": response}
+    except Exception as e:
+        logger.error(f"Clear local list error for {charge_point_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/send/{charge_point_id}/get_local_list_version")
+async def get_local_list_version(charge_point_id: str):
+    """Send GetLocalListVersion request."""
+    if charge_point_id not in charge_points:
+        raise HTTPException(status_code=404, detail="Charger not connected")
+    
+    try:
+        logger.info(f"Getting local list version for {charge_point_id}")
+        response = await charge_points[charge_point_id].get_local_list_version()
+        logger.info(f"Get local list version response from {charge_point_id}: {response}")
+        return {"status": "success", "response": response}
+    except Exception as e:
+        logger.error(f"Get local list version error for {charge_point_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/send/{charge_point_id}/data_transfer")
+async def data_transfer(charge_point_id: str, request: DataTransferRequest):
+    """Send DataTransfer request."""
+    if charge_point_id not in charge_points:
+        raise HTTPException(status_code=404, detail="Charger not connected")
+    
+    try:
+        response = await charge_points[charge_point_id].data_transfer(
+            vendor_id=request.vendor_id,
+            message_id=request.message_id,
+            data=request.data
+        )
+        return {"status": "success", "response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/idtags")
+async def get_id_tags():
+    """Get all idTags."""
+    return charger_store.get_id_tags()
+
+@router.post("/api/idtags")
+async def add_id_tag(request: IdTagRequest):
+    """Add or update an idTag."""
+    expiry_date = None
+    if request.expiry_date:
+        try:
+            from datetime import datetime
+            # Handle datetime-local format (YYYY-MM-DDTHH:MM)
+            if 'T' in request.expiry_date:
+                expiry_date = datetime.fromisoformat(request.expiry_date)
+            else:
+                # Handle date only format
+                expiry_date = datetime.strptime(request.expiry_date, '%Y-%m-%d')
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid expiry date format: {str(e)}")
+    
+    charger_store.add_id_tag(request.id_tag, request.status, expiry_date)
+    return {"status": "success", "message": f"Added/Updated idTag: {request.id_tag}"}
+
+@router.delete("/api/idtags/{id_tag}")
+async def delete_id_tag(id_tag: str):
+    """Delete an idTag."""
+    if db.delete_id_tag(id_tag):
+        return {"status": "success", "message": f"Deleted idTag: {id_tag}"}
+    raise HTTPException(status_code=404, detail="ID tag not found")
+
+@router.get("/api/connector_status/{charge_point_id}")
+async def get_connector_status(charge_point_id: str):
+    """Get connector status for a charger."""
+    return charger_store.get_connector_status(charge_point_id)
+
+@router.get("/api/active_transactions/{charge_point_id}")
+async def get_active_transactions(charge_point_id: str):
+    """Get active transactions for a charger."""
+    from .database import Charger
+    charger = db.session.query(Charger).filter_by(charge_point_id=charge_point_id).first()
+    
+    active_transactions = []
+    if charger and charger.current_transaction:
+        # Check if charger is actively charging
+        if str(charger.status).lower() in ["charging", "preparing"]:
+            active_transactions.append({
+                "transaction_id": charger.current_transaction,
+                "status": charger.status,
+                "start_time": charger.last_heartbeat.isoformat() if charger.last_heartbeat else None
+            })
+    
+    return {"active_transactions": active_transactions}
+
+# Data Transfer Packet endpoints
+@router.get("/api/data_transfer_packets")
+async def get_data_transfer_packets():
+    try:
+        return db.get_data_transfer_packets()
+    except Exception as e:
+        logger.error(f"Error getting data transfer packets: {e}")
+        traceback.print_exc()
+        return []
+
+@router.post("/api/data_transfer_packets")
+async def create_data_transfer_packet(request: DataTransferPacketRequest):
+    """Create a new data transfer packet."""
+    try:
+        packet_id = db.save_data_transfer_packet(
+            name=request.name,
+            vendor_id=request.vendor_id,
+            message_id=request.message_id,
+            data=request.data
+        )
+        return {"status": "success", "id": packet_id}
+    except Exception as e:
+        logger.error(f"Error creating data transfer packet: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/api/data_transfer_packets/{packet_id}")
+async def delete_data_transfer_packet(packet_id: int):
+    """Delete a data transfer packet."""
+    try:
+        if db.delete_data_transfer_packet(packet_id):
+            return {"status": "success", "message": f"Deleted packet: {packet_id}"}
+        raise HTTPException(status_code=404, detail="Packet not found")
+    except Exception as e:
+        logger.error(f"Error deleting data transfer packet: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) 
