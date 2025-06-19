@@ -7,7 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
 
-from .api_routes import router as api_router
+from backend.api_routes import router as api_router
+from backend.config import config
 
 # Configure logging
 logging.basicConfig(
@@ -52,15 +53,20 @@ app.include_router(api_router, prefix="")  # No prefix for OCPP endpoints
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     """Serve the main dashboard page."""
-    return templates.TemplateResponse("index.html", {"request": request})
+    ui_features = config.get_ui_features()
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "ui_features": ui_features
+    })
 
 def start():
     """Start the FastAPI server."""
+    server_config = config.get_server_config()
     uvicorn.run(
         "backend.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=False
+        host=server_config['host'],
+        port=server_config['port'],
+        reload=server_config['reload']
     )
 
 if __name__ == "__main__":

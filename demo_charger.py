@@ -5,7 +5,7 @@ from datetime import datetime
 import random
 from ocpp.v16 import ChargePoint as cp
 from ocpp.v16 import call, call_result
-from ocpp.v16.enums import RegistrationStatus, ChargePointStatus, AuthorizationStatus, RemoteStartStopStatus
+from ocpp.v16.enums import RegistrationStatus, ChargePointStatus, AuthorizationStatus, RemoteStartStopStatus, AvailabilityStatus, ReservationStatus, CancelReservationStatus, ChargingProfileStatus, ClearChargingProfileStatus, GetCompositeScheduleStatus
 from ocpp.routing import on
 
 # Configure logging
@@ -317,7 +317,8 @@ class ChargePoint(cp):
                 
                 # Simulate restart
                 await asyncio.sleep(1)
-                await self.send_status_notification(1, ChargePointStatus.available)
+                # Send status notification asynchronously to avoid blocking the response
+                asyncio.create_task(self.send_status_notification(1, ChargePointStatus.available))
                 logger.info("✅ Soft reset completed - charger software restarted")
             
             return call_result.Reset(status="Accepted")
@@ -325,6 +326,301 @@ class ChargePoint(cp):
         except Exception as e:
             logger.error(f"❌ Error during reset: {e}")
             return call_result.Reset(status="Rejected")
+
+    # === NEW HANDLERS FOR ADVANCED FUNCTIONS ===
+    
+    # Handle ChangeAvailability request from CMS
+    @on('ChangeAvailability')
+    async def on_change_availability(self, connector_id, **kwargs):
+        """Handle ChangeAvailability request from CMS"""
+        availability_type = kwargs.get('type')
+        logger.info(f"🔧 ChangeAvailability: connector={connector_id}, type={availability_type}")
+        
+        try:
+            # Check if it's a valid AvailabilityType enum or string
+            type_str = str(availability_type)
+            logger.info(f"🔧 Type string: {type_str}")
+            
+            if "inoperative" in type_str.lower() or "Inoperative" in type_str:
+                logger.info(f"🚫 Setting connector {connector_id} to INOPERATIVE")
+                # Send status notification asynchronously to avoid blocking the response
+                asyncio.create_task(self.send_status_notification(connector_id, ChargePointStatus.unavailable))
+                return call_result.ChangeAvailability(status=AvailabilityStatus.accepted)
+                
+            elif "operative" in type_str.lower() or "Operative" in type_str:
+                logger.info(f"✅ Setting connector {connector_id} to OPERATIVE")
+                # Send status notification asynchronously to avoid blocking the response
+                asyncio.create_task(self.send_status_notification(connector_id, ChargePointStatus.available))
+                return call_result.ChangeAvailability(status=AvailabilityStatus.accepted)
+            
+            else:
+                logger.warning(f"❌ Unknown availability type: {availability_type}")
+                return call_result.ChangeAvailability(status=AvailabilityStatus.rejected)
+                
+        except Exception as e:
+            logger.error(f"❌ Error in ChangeAvailability: {e}")
+            return call_result.ChangeAvailability(status=AvailabilityStatus.rejected)
+
+    # Handle ReserveNow request from CMS
+    @on('ReserveNow')
+    async def on_reserve_now(self, connector_id, expiry_date, id_tag, reservation_id, parent_id_tag=None, **kwargs):
+        """Handle ReserveNow request from CMS"""
+        logger.info(f"🅿️ Received ReserveNow request - Connector: {connector_id}, ID Tag: {id_tag}, Reservation ID: {reservation_id}")
+        
+        try:
+            # Check if connector is available
+            if self.charging and connector_id == 1:
+                logger.warning("⚠️ Connector is occupied, cannot reserve")
+                return call_result.ReserveNow(status=ReservationStatus.occupied)
+            
+            # Store reservation (in a real charger, this would be persistent)
+            if not hasattr(self, 'reservations'):
+                self.reservations = {}
+            
+            self.reservations[reservation_id] = {
+                'connector_id': connector_id,
+                'id_tag': id_tag,
+                'expiry_date': expiry_date,
+                'parent_id_tag': parent_id_tag
+            }
+            
+            # Update status to reserved asynchronously
+            asyncio.create_task(self.send_status_notification(connector_id, ChargePointStatus.reserved))
+            
+            logger.info(f"✅ Reservation {reservation_id} created for connector {connector_id}")
+            return call_result.ReserveNow(status=ReservationStatus.accepted)
+            
+        except Exception as e:
+            logger.error(f"❌ Error in ReserveNow handler: {e}")
+            return call_result.ReserveNow(status=ReservationStatus.rejected)
+
+    # Handle CancelReservation request from CMS
+    @on('CancelReservation')
+    async def on_cancel_reservation(self, reservation_id, **kwargs):
+        """Handle CancelReservation request from CMS"""
+        logger.info(f"❌ Received CancelReservation request - Reservation ID: {reservation_id}")
+        
+        try:
+            # Check if reservation exists
+            if not hasattr(self, 'reservations') or reservation_id not in self.reservations:
+                logger.warning(f"⚠️ Reservation {reservation_id} not found")
+                return call_result.CancelReservation(status=CancelReservationStatus.rejected)
+            
+            # Get reservation details
+            reservation = self.reservations[reservation_id]
+            connector_id = reservation['connector_id']
+            
+            # Remove reservation
+            del self.reservations[reservation_id]
+            
+            # Update status back to available (if not charging) asynchronously
+            if not self.charging:
+                asyncio.create_task(self.send_status_notification(connector_id, ChargePointStatus.available))
+            
+            logger.info(f"✅ Reservation {reservation_id} cancelled for connector {connector_id}")
+            return call_result.CancelReservation(status=CancelReservationStatus.accepted)
+            
+        except Exception as e:
+            logger.error(f"❌ Error in CancelReservation handler: {e}")
+            return call_result.CancelReservation(status=CancelReservationStatus.rejected)
+
+    # Handle SetChargingProfile request from CMS
+    @on('SetChargingProfile')
+    async def on_set_charging_profile(self, connector_id, cs_charging_profiles, **kwargs):
+        """Handle SetChargingProfile request from CMS"""
+        profile_id = cs_charging_profiles.get('chargingProfileId', 'Unknown')
+        logger.info(f"🔋 Received SetChargingProfile request - Connector: {connector_id}, Profile ID: {profile_id}")
+        
+        try:
+            # Store charging profile (in a real charger, this would control actual charging behavior)
+            if not hasattr(self, 'charging_profiles'):
+                self.charging_profiles = {}
+            
+            connector_key = f"connector_{connector_id}"
+            if connector_key not in self.charging_profiles:
+                self.charging_profiles[connector_key] = {}
+            
+            self.charging_profiles[connector_key][profile_id] = cs_charging_profiles
+            
+            # Log profile details
+            purpose = cs_charging_profiles.get('chargingProfilePurpose', 'Unknown')
+            kind = cs_charging_profiles.get('chargingProfileKind', 'Unknown')
+            stack_level = cs_charging_profiles.get('stackLevel', 'Unknown')
+            
+            logger.info(f"📊 Charging Profile Details:")
+            logger.info(f"   - Purpose: {purpose}")
+            logger.info(f"   - Kind: {kind}")
+            logger.info(f"   - Stack Level: {stack_level}")
+            
+            # Log charging schedule if present
+            if 'chargingSchedule' in cs_charging_profiles:
+                schedule = cs_charging_profiles['chargingSchedule']
+                rate_unit = schedule.get('chargingRateUnit', 'Unknown')
+                periods = schedule.get('chargingSchedulePeriod', [])
+                logger.info(f"   - Rate Unit: {rate_unit}")
+                logger.info(f"   - Schedule Periods: {len(periods)}")
+                
+                for i, period in enumerate(periods[:3]):  # Show first 3 periods
+                    start = period.get('startPeriod', 'Unknown')
+                    limit = period.get('limit', 'Unknown')
+                    logger.info(f"     Period {i+1}: Start={start}s, Limit={limit}{rate_unit}")
+            
+            logger.info(f"✅ Charging profile {profile_id} set for connector {connector_id}")
+            return call_result.SetChargingProfile(status=ChargingProfileStatus.accepted)
+            
+        except Exception as e:
+            logger.error(f"❌ Error in SetChargingProfile handler: {e}")
+            return call_result.SetChargingProfile(status=ChargingProfileStatus.rejected)
+
+    # Handle ClearChargingProfile request from CMS
+    @on('ClearChargingProfile')
+    async def on_clear_charging_profile(self, id=None, connector_id=None, charging_profile_purpose=None, stack_level=None, **kwargs):
+        """Handle ClearChargingProfile request from CMS"""
+        logger.info(f"🗑️ Received ClearChargingProfile request")
+        if id: logger.info(f"   - Profile ID: {id}")
+        if connector_id: logger.info(f"   - Connector ID: {connector_id}")
+        if charging_profile_purpose: logger.info(f"   - Purpose: {charging_profile_purpose}")
+        if stack_level: logger.info(f"   - Stack Level: {stack_level}")
+        
+        try:
+            if not hasattr(self, 'charging_profiles'):
+                self.charging_profiles = {}
+            
+            profiles_cleared = 0
+            
+            # Clear profiles based on criteria
+            connectors_to_check = []
+            if connector_id is not None:
+                connectors_to_check = [f"connector_{connector_id}"]
+            else:
+                connectors_to_check = list(self.charging_profiles.keys())
+            
+            for conn_key in connectors_to_check:
+                if conn_key in self.charging_profiles:
+                    profiles_to_remove = []
+                    
+                    for prof_id, profile in self.charging_profiles[conn_key].items():
+                        should_remove = True
+                        
+                        # Check all criteria
+                        if id is not None and profile.get('chargingProfileId') != id:
+                            should_remove = False
+                        if charging_profile_purpose and profile.get('chargingProfilePurpose') != charging_profile_purpose:
+                            should_remove = False
+                        if stack_level is not None and profile.get('stackLevel') != stack_level:
+                            should_remove = False
+                        
+                        if should_remove:
+                            profiles_to_remove.append(prof_id)
+                    
+                    # Remove matching profiles
+                    for prof_id in profiles_to_remove:
+                        del self.charging_profiles[conn_key][prof_id]
+                        profiles_cleared += 1
+                        logger.info(f"🗑️ Cleared charging profile {prof_id} from {conn_key}")
+                    
+                    # Clean up empty connector entries
+                    if not self.charging_profiles[conn_key]:
+                        del self.charging_profiles[conn_key]
+            
+            logger.info(f"✅ Cleared {profiles_cleared} charging profile(s)")
+            return call_result.ClearChargingProfile(status=ClearChargingProfileStatus.accepted)
+            
+        except Exception as e:
+            logger.error(f"❌ Error in ClearChargingProfile handler: {e}")
+            return call_result.ClearChargingProfile(status=ClearChargingProfileStatus.unknown)
+
+    # Handle GetCompositeSchedule request from CMS
+    @on('GetCompositeSchedule')
+    async def on_get_composite_schedule(self, connector_id, duration, charging_rate_unit=None, **kwargs):
+        """Handle GetCompositeSchedule request from CMS"""
+        logger.info(f"📊 Received GetCompositeSchedule request - Connector: {connector_id}, Duration: {duration}s")
+        if charging_rate_unit:
+            logger.info(f"   - Charging Rate Unit: {charging_rate_unit}")
+        
+        try:
+            if not hasattr(self, 'charging_profiles'):
+                self.charging_profiles = {}
+            
+            connector_key = f"connector_{connector_id}"
+            
+            # Check if we have any profiles for this connector
+            if connector_key not in self.charging_profiles or not self.charging_profiles[connector_key]:
+                logger.info("📋 No charging profiles found for connector")
+                return call_result.GetCompositeSchedule(status=GetCompositeScheduleStatus.rejected)
+            
+            # Get current time as schedule start
+            from datetime import datetime
+            schedule_start = datetime.utcnow().isoformat() + "Z"
+            
+            # Build a composite schedule from all active profiles
+            # For demo purposes, we'll use the profile with the highest stack level
+            active_profiles = self.charging_profiles[connector_key]
+            
+            # Sort profiles by stack level (higher number = higher priority)
+            sorted_profiles = sorted(
+                active_profiles.values(), 
+                key=lambda x: x.get('stackLevel', 0), 
+                reverse=True
+            )
+            
+            if not sorted_profiles:
+                logger.info("📋 No valid charging profiles found")
+                return call_result.GetCompositeSchedule(status=GetCompositeScheduleStatus.rejected)
+            
+            # Use the highest priority profile as the basis for composite schedule
+            primary_profile = sorted_profiles[0]
+            charging_schedule = primary_profile.get('chargingSchedule', {})
+            
+            # Determine the charging rate unit
+            if charging_rate_unit:
+                # Use requested rate unit
+                effective_rate_unit = charging_rate_unit
+            else:
+                # Use the rate unit from the profile
+                effective_rate_unit = charging_schedule.get('chargingRateUnit', 'A')
+            
+            # Build the composite schedule
+            composite_schedule = {
+                'duration': min(duration, charging_schedule.get('duration', duration)),
+                'startSchedule': schedule_start,
+                'chargingRateUnit': effective_rate_unit,
+                'chargingSchedulePeriod': charging_schedule.get('chargingSchedulePeriod', [
+                    {
+                        'startPeriod': 0,
+                        'limit': 16.0,  # Default 16A limit
+                        'numberPhases': 3
+                    }
+                ])
+            }
+            
+            # Add min charging rate if present
+            if 'minChargingRate' in charging_schedule:
+                composite_schedule['minChargingRate'] = charging_schedule['minChargingRate']
+            
+            logger.info(f"📊 Composite Schedule Details:")
+            logger.info(f"   - Rate Unit: {effective_rate_unit}")
+            logger.info(f"   - Duration: {composite_schedule['duration']}s")
+            logger.info(f"   - Periods: {len(composite_schedule['chargingSchedulePeriod'])}")
+            
+            # Log first few periods
+            for i, period in enumerate(composite_schedule['chargingSchedulePeriod'][:3]):
+                start = period.get('startPeriod', 0)
+                limit = period.get('limit', 0)
+                logger.info(f"     Period {i+1}: Start={start}s, Limit={limit}{effective_rate_unit}")
+            
+            logger.info(f"✅ Returning composite schedule for connector {connector_id}")
+            
+            return call_result.GetCompositeSchedule(
+                status=GetCompositeScheduleStatus.accepted,
+                connector_id=connector_id,
+                schedule_start=schedule_start,
+                charging_schedule=composite_schedule
+            )
+            
+        except Exception as e:
+            logger.error(f"❌ Error in GetCompositeSchedule handler: {e}")
+            return call_result.GetCompositeSchedule(status=GetCompositeScheduleStatus.rejected)
 
     async def _handle_remote_start_async(self, connector_id: int, id_tag: str):
         """Handle the actual remote start process asynchronously"""
@@ -409,9 +705,43 @@ class ChargePoint(cp):
             # Ensure we're back to available state
             await self.send_status_notification(1, ChargePointStatus.available)
 
+    async def demonstrate_advanced_features(self):
+        """Demonstrate the new OCPP 1.6 features (for testing purposes)"""
+        try:
+            logger.info("🎯 Demonstrating Advanced OCPP 1.6 Features...")
+            logger.info("   (These features are now available for CMS to use)")
+            
+            # Display current capabilities
+            logger.info("✨ Supported Advanced Features:")
+            logger.info("   🔧 Change Availability (Operative/Inoperative)")
+            logger.info("   🅿️ Reservation Management (ReserveNow/CancelReservation)")
+            logger.info("   🔋 Smart Charging (SetChargingProfile/ClearChargingProfile/GetCompositeSchedule)")
+            
+            # Show current states
+            logger.info("📊 Current Charger State:")
+            logger.info(f"   - Charging: {self.charging}")
+            logger.info(f"   - Current Transaction: {self.current_transaction_id}")
+            logger.info(f"   - Authorized Tags: {len(self.authorized_tags)}")
+            
+            if hasattr(self, 'reservations'):
+                logger.info(f"   - Active Reservations: {len(self.reservations)}")
+            
+            if hasattr(self, 'charging_profiles'):
+                profile_count = sum(len(profiles) for profiles in self.charging_profiles.values())
+                logger.info(f"   - Charging Profiles: {profile_count}")
+            
+            logger.info("🎮 Use the CMS web interface or API to test these features:")
+            logger.info("   • Send ChangeAvailability to make connector operative/inoperative")
+            logger.info("   • Create reservations with ReserveNow")
+            logger.info("   • Set charging profiles for smart charging")
+            logger.info("   • Get composite schedules to see active charging limits")
+            
+        except Exception as e:
+            logger.error(f"Error in advanced features demonstration: {e}")
+
 async def main():
     async with websockets.connect(
-        "ws://192.168.1.10:8000/ws/DEMO001",
+        "ws://localhost:8000/ws/DEMO001",
         subprotocols=["ocpp1.6"]
     ) as ws:
         charge_point = ChargePoint("DEMO001", ws)
@@ -430,11 +760,17 @@ async def main():
         logger.info("   • Remote Start Transaction")
         logger.info("   • Remote Stop Transaction") 
         logger.info("   • Authorization requests")
+        logger.info("   • Change Availability")
+        logger.info("   • Reservation Management")
+        logger.info("   • Smart Charging")
         logger.info("   • Automatic charging simulation")
+        
+        # Demonstrate advanced features
+        await charge_point.demonstrate_advanced_features()
         
         # Ask user if they want to run automatic simulation
         logger.info("⏳ Waiting 10 seconds, then running automatic simulation...")
-        logger.info("   (Use Remote Start/Stop from CMS to control manually)")
+        logger.info("   (Use CMS interface to test new features manually)")
         await asyncio.sleep(10)
         
         # Run automatic simulation if no manual control happened
@@ -444,6 +780,7 @@ async def main():
         # Continue with heartbeats
         logger.info("💓 Continuing with regular heartbeats...")
         logger.info("   Charger remains available for remote commands...")
+        logger.info("   ✨ NEW: Test Change Availability, Reservations, and Smart Charging!")
         while True:
             await charge_point.send_heartbeat()
             await asyncio.sleep(30)

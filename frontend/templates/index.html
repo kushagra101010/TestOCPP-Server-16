@@ -8,7 +8,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         .log-container {
-            height: 500px;
+            height: 700px;
             overflow-y: auto;
             background-color: #f8f9fa;
             padding: 1rem;
@@ -109,6 +109,11 @@
                     <i class="bi bi-credit-card"></i> ID Tags
                 </button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="config-tab" data-bs-toggle="tab" data-bs-target="#config" type="button" role="tab">
+                    <i class="bi bi-gear"></i> Configuration
+                </button>
+            </li>
         </ul>
 
         <!-- Tab Content -->
@@ -119,8 +124,14 @@
                     <!-- Left Panel -->
                     <div class="col-md-4">
                         <div class="card">
-                            <div class="card-header">
+                            <div class="card-header d-flex justify-content-between align-items-center">
                                 <h5 class="card-title mb-0">Chargers</h5>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="hideDisconnectedChargers" checked onchange="toggleHideDisconnected()">
+                                    <label class="form-check-label text-muted small" for="hideDisconnectedChargers">
+                                        <i class="bi bi-eye-slash"></i> Hide disconnected
+                                    </label>
+                                </div>
                             </div>
                             <div class="card-body">
                                 <div id="chargerList" class="list-group">
@@ -162,6 +173,129 @@
                                     <button class="btn btn-info" onclick="showTriggerMessageModal()">
                                         <i class="bi bi-lightning"></i> Trigger Message
                                     </button>
+                                    <button class="btn btn-outline-danger" onclick="showRawMessageModal()">
+                                        <i class="bi bi-code-slash"></i> Send Raw Message
+                                    </button>
+                                    
+                                    <!-- Advanced Functions Section -->
+                                    <hr class="my-3">
+                                    <h6 class="text-muted mb-2">Advanced Functions</h6>
+                                    
+                                    <!-- Change Availability -->
+                                    <div class="btn-group w-100 mb-2" role="group">
+                                        <button class="btn btn-outline-warning" onclick="showChangeAvailabilityModal()">
+                                            <i class="bi bi-toggle-off"></i> Set Inoperative
+                                        </button>
+                                        <button class="btn btn-outline-success" onclick="showChangeAvailabilityModal('Operative')">
+                                            <i class="bi bi-toggle-on"></i> Set Operative
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- Reservation Functions -->
+                                    <div class="btn-group w-100 mb-2" role="group">
+                                        <button class="btn btn-outline-primary" onclick="showReserveNowModal()">
+                                            <i class="bi bi-calendar-plus"></i> Reserve Now
+                                        </button>
+                                        <button class="btn btn-outline-secondary" onclick="showCancelReservationModal()">
+                                            <i class="bi bi-calendar-x"></i> Cancel Reservation
+                                        </button>
+                                    </div>
+                                    <button class="btn btn-outline-info w-100 mb-2" onclick="showReservationsModal()">
+                                        <i class="bi bi-calendar-check"></i> View Reservations
+                                    </button>
+                                    
+                                    <!-- Smart Charging Functions -->
+                                    <div class="btn-group w-100 mb-2" role="group">
+                                        <button class="btn btn-outline-primary" onclick="showSetChargingProfileModal()">
+                                            <i class="bi bi-battery-charging"></i> Set Profile
+                                        </button>
+                                        <button class="btn btn-outline-secondary" onclick="showClearChargingProfileModal()">
+                                            <i class="bi bi-battery"></i> Clear Profile
+                                        </button>
+                                    </div>
+                                    <div class="btn-group w-100 mb-2" role="group">
+                                        <button class="btn btn-outline-info" onclick="showChargingProfilesModal()">
+                                            <i class="bi bi-list-ul"></i> View Profiles
+                                        </button>
+                                        <button class="btn btn-outline-success" onclick="showGetCompositeScheduleModal()">
+                                            <i class="bi bi-calendar2-week"></i> Get Schedule
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- Firmware & Diagnostics -->
+                                    <hr class="my-3">
+                                    <h6 class="text-muted mb-2">Firmware & Diagnostics</h6>
+                                    
+                                    <div class="btn-group w-100 mb-2" role="group">
+                                        <button class="btn btn-outline-primary" onclick="showUpdateFirmwareModal()">
+                                            <i class="bi bi-cloud-arrow-down"></i> Update Firmware
+                                        </button>
+                                        <button class="btn btn-outline-info" onclick="showGetDiagnosticsModal()">
+                                            <i class="bi bi-file-earmark-medical"></i> Get Diagnostics
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- Connector Management -->
+                                    <button class="btn btn-outline-warning w-100" onclick="showUnlockConnectorModal()">
+                                        <i class="bi bi-unlock"></i> Unlock Connector
+                                    </button>
+                                    
+                                    <!-- Jio_BP Data Transfer Settings -->
+                                    {% if ui_features.get('show_jio_bp_data_transfer', True) %}
+                                    <div class="card mt-3">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">
+                                                <i class="bi bi-arrow-left-right"></i> Jio_BP Data Transfer
+                                            </h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <button class="btn btn-outline-warning w-100" onclick="showJioBpSettingsModal()">
+                                                <i class="bi bi-gear"></i> Configure Auto Data Transfer
+                                            </button>
+                                            <small class="text-muted mt-2 d-block">
+                                                Automatically send Stop_Energy or Stop_Time packets after transaction start
+                                            </small>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                    
+                                    <!-- MSIL Data Transfer Settings -->
+                                    {% if ui_features.get('show_msil_data_transfer', True) %}
+                                    <div class="card mt-3">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">
+                                                <i class="bi bi-arrow-left-right"></i> MSIL Data Transfer
+                                            </h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <button class="btn btn-outline-info w-100" onclick="showMsilSettingsModal()">
+                                                <i class="bi bi-gear"></i> Configure MSIL AutoStop
+                                            </button>
+                                            <small class="text-muted mt-2 d-block">
+                                                Automatically send AutoStop packets with energy limit (object format)
+                                            </small>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                    
+                                    <!-- CZ Data Transfer Settings -->
+                                    {% if ui_features.get('show_cz_data_transfer', True) %}
+                                    <div class="card mt-3">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">
+                                                <i class="bi bi-arrow-left-right"></i> CZ Data Transfer
+                                            </h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <button class="btn btn-outline-success w-100" onclick="showCzSettingsModal()">
+                                                <i class="bi bi-gear"></i> Configure CZ AutoStop
+                                            </button>
+                                            <small class="text-muted mt-2 d-block">
+                                                Automatically send AutoStop packets with energy limit (string format)
+                                            </small>
+                                        </div>
+                                    </div>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>
@@ -179,7 +313,187 @@
                                     <button class="btn btn-sm btn-outline-success" onclick="downloadLogsCSV()">
                                         <i class="bi bi-download"></i> Download CSV
                                     </button>
-                                    <button class="btn btn-sm btn-outline-secondary" onclick="clearLogs()">Clear</button>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="clearLogs()">Clear Logs</button>
+                                    <button class="btn btn-sm btn-danger" onclick="showDeleteChargerModal()">
+                                        <i class="bi bi-trash"></i> Delete Charger
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Log Filter Controls -->
+                            <div class="card-body border-bottom bg-light">
+                                <div class="row align-items-center">
+                                    <div class="col-md-6">
+                                        <label class="form-label mb-1"><i class="bi bi-funnel"></i> Filter by OCPP Message Type:</label>
+                                        <div class="dropdown">
+                                            <button class="btn btn-outline-secondary btn-sm dropdown-toggle w-100 text-start" type="button" id="logMessageFilterDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                                <span id="filterButtonText">Show All Messages</span>
+                                            </button>
+                                            <div class="dropdown-menu w-100 p-2" aria-labelledby="logMessageFilterDropdown" style="max-height: 400px; overflow-y: auto;">
+                                                <!-- Quick Actions -->
+                                                <div class="mb-2 pb-2 border-bottom">
+                                                    <button class="btn btn-sm btn-outline-primary me-1" onclick="selectAllFilters()">Select All</button>
+                                                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="clearAllFilters()">Clear All</button>
+                                                    <button class="btn btn-sm btn-outline-success" onclick="selectCommonFilters()">Common Only</button>
+                                                </div>
+                                                
+                                                <!-- Show All Option -->
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input" type="checkbox" value="all" id="filter_all" onchange="handleShowAllFilter(this)">
+                                                    <label class="form-check-label fw-bold" for="filter_all">Show All Messages</label>
+                                                </div>
+                                                <hr>
+                                                
+                                                <!-- Message Direction -->
+                                                <h6 class="dropdown-header">Message Direction</h6>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="charger-to-server" id="filter_charger-to-server" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_charger-to-server">🔵 All Charger → Server Messages</label>
+                                                </div>
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input" type="checkbox" value="server-to-charger" id="filter_server-to-charger" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_server-to-charger">🔴 All Server → Charger Messages</label>
+                                                </div>
+                                                
+                                                <!-- Charger to Server Messages -->
+                                                <h6 class="dropdown-header">Charger → Server (Requests + Responses)</h6>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="BootNotification" id="filter_BootNotification" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_BootNotification">BootNotification + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="StatusNotification" id="filter_StatusNotification" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_StatusNotification">StatusNotification + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="Heartbeat" id="filter_Heartbeat" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_Heartbeat">Heartbeat + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="Authorize" id="filter_Authorize" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_Authorize">Authorize + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="StartTransaction" id="filter_StartTransaction" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_StartTransaction">StartTransaction + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="StopTransaction" id="filter_StopTransaction" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_StopTransaction">StopTransaction + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="MeterValues" id="filter_MeterValues" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_MeterValues">MeterValues + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="DataTransfer" id="filter_DataTransfer" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_DataTransfer">DataTransfer + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="FirmwareStatusNotification" id="filter_FirmwareStatusNotification" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_FirmwareStatusNotification">FirmwareStatusNotification + Response</label>
+                                                </div>
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input" type="checkbox" value="DiagnosticsStatusNotification" id="filter_DiagnosticsStatusNotification" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_DiagnosticsStatusNotification">DiagnosticsStatusNotification + Response</label>
+                                                </div>
+                                                
+                                                <!-- Server to Charger Messages -->
+                                                <h6 class="dropdown-header">Server → Charger (Commands + Responses)</h6>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="RemoteStartTransaction" id="filter_RemoteStartTransaction" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_RemoteStartTransaction">RemoteStartTransaction + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="RemoteStopTransaction" id="filter_RemoteStopTransaction" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_RemoteStopTransaction">RemoteStopTransaction + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="GetConfiguration" id="filter_GetConfiguration" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_GetConfiguration">GetConfiguration + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="ChangeConfiguration" id="filter_ChangeConfiguration" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_ChangeConfiguration">ChangeConfiguration + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="ClearCache" id="filter_ClearCache" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_ClearCache">ClearCache + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="Reset" id="filter_Reset" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_Reset">Reset + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="SendLocalList" id="filter_SendLocalList" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_SendLocalList">SendLocalList + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="ClearLocalList" id="filter_ClearLocalList" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_ClearLocalList">ClearLocalList + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="GetLocalListVersion" id="filter_GetLocalListVersion" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_GetLocalListVersion">GetLocalListVersion + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="TriggerMessage" id="filter_TriggerMessage" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_TriggerMessage">TriggerMessage + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="ChangeAvailability" id="filter_ChangeAvailability" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_ChangeAvailability">ChangeAvailability + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="ReserveNow" id="filter_ReserveNow" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_ReserveNow">ReserveNow + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="CancelReservation" id="filter_CancelReservation" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_CancelReservation">CancelReservation + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="SetChargingProfile" id="filter_SetChargingProfile" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_SetChargingProfile">SetChargingProfile + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="ClearChargingProfile" id="filter_ClearChargingProfile" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_ClearChargingProfile">ClearChargingProfile + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="GetCompositeSchedule" id="filter_GetCompositeSchedule" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_GetCompositeSchedule">GetCompositeSchedule + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="UpdateFirmware" id="filter_UpdateFirmware" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_UpdateFirmware">UpdateFirmware + Response</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="GetDiagnostics" id="filter_GetDiagnostics" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_GetDiagnostics">GetDiagnostics + Response</label>
+                                                </div>
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input" type="checkbox" value="UnlockConnector" id="filter_UnlockConnector" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_UnlockConnector">UnlockConnector + Response</label>
+                                                </div>
+                                                
+                                                <!-- System Messages -->
+                                                <h6 class="dropdown-header">System Messages</h6>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" value="connection" id="filter_connection" onchange="updateMessageFilter()">
+                                                    <label class="form-check-label" for="filter_connection">Connection Events</label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label mb-1"><i class="bi bi-search"></i> Search in logs:</label>
+                                        <input type="text" class="form-control form-control-sm" id="logSearchFilter" placeholder="Search text..." oninput="applyLogFilter()">
+                                    </div>
+                                    <div class="col-md-2 text-end">
+                                        <button class="btn btn-sm btn-outline-warning" onclick="clearLogFilters()" title="Clear all filters">
+                                            <i class="bi bi-x-circle"></i> Clear Filters
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             <div class="card-body">
@@ -233,6 +547,19 @@
                                     <div class="card-header d-flex justify-content-between align-items-center">
                                         <h6 class="mb-0">Existing ID Tags</h6>
                                         <div class="btn-group" role="group">
+                                            <div class="btn-group dropstart" role="group">
+                                                <button type="button" class="btn btn-outline-success btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                                                    <i class="bi bi-shuffle"></i> Random ID Tags
+                                                </button>
+                                                <ul class="dropdown-menu">
+                                                    <li><a class="dropdown-item" href="#" onclick="generateRandomIdTags(5, 1)">5 Tags (1 day validity)</a></li>
+                                                    <li><a class="dropdown-item" href="#" onclick="generateRandomIdTags(10, 1)">10 Tags (1 day validity)</a></li>
+                                                    <li><a class="dropdown-item" href="#" onclick="generateRandomIdTags(20, 1)">20 Tags (1 day validity)</a></li>
+                                                    <li><hr class="dropdown-divider"></li>
+                                                    <li><a class="dropdown-item" href="#" onclick="generateRandomIdTags(10, 30)">10 Tags (30 days validity)</a></li>
+                                                    <li><a class="dropdown-item" href="#" onclick="generateRandomIdTags(50, 365)">50 Tags (1 year validity)</a></li>
+                                                </ul>
+                                            </div>
                                             <button type="button" class="btn btn-outline-primary btn-sm" onclick="selectAllIdTags()" id="selectAllBtn">
                                                 <i class="bi bi-check-all"></i> Select All
                                             </button>
@@ -248,6 +575,98 @@
                                         <div id="idTagList" class="row">
                                             <!-- ID tags will be populated here -->
                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Configuration Tab -->
+            <div class="tab-pane fade" id="config" role="tabpanel">
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-gear"></i> UI Feature Configuration
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle"></i>
+                                    <strong>Configure UI Features:</strong> Control which data transfer functions are shown in the dashboard. 
+                                    Changes will be saved to the config.ini file and require a page refresh to take effect.
+                                </div>
+
+                                <!-- UI Features Configuration -->
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">Data Transfer Functions</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" id="showJioBpDataTransfer" {% if ui_features.get('show_jio_bp_data_transfer', True) %}checked{% endif %}>
+                                                    <label class="form-check-label" for="showJioBpDataTransfer">
+                                                        <strong>Jio_BP Data Transfer</strong>
+                                                    </label>
+                                                </div>
+                                                <small class="text-muted">Automatically send Stop_Energy or Stop_Time packets after transaction start</small>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" id="showMsilDataTransfer" {% if ui_features.get('show_msil_data_transfer', True) %}checked{% endif %}>
+                                                    <label class="form-check-label" for="showMsilDataTransfer">
+                                                        <strong>MSIL Data Transfer</strong>
+                                                    </label>
+                                                </div>
+                                                <small class="text-muted">Automatically send AutoStop packets with energy limit (object format)</small>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" id="showCzDataTransfer" {% if ui_features.get('show_cz_data_transfer', True) %}checked{% endif %}>
+                                                    <label class="form-check-label" for="showCzDataTransfer">
+                                                        <strong>CZ Data Transfer</strong>
+                                                    </label>
+                                                </div>
+                                                <small class="text-muted">Automatically send AutoStop packets with energy limit (string format)</small>
+                                            </div>
+                                        </div>
+                                        
+                                        <hr class="my-4">
+                                        
+                                        <div class="d-flex gap-2">
+                                            <button type="button" class="btn btn-primary" onclick="saveUIFeatures()">
+                                                <i class="bi bi-floppy"></i> Save Configuration
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary" onclick="loadCurrentUIFeatures()">
+                                                <i class="bi bi-arrow-clockwise"></i> Reload Current Settings
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Configuration File Preview -->
+                                <div class="card mt-3">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">Configuration File (config.ini)</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="alert alert-secondary">
+                                            <strong>Current Settings:</strong>
+                                            <ul class="mb-0 mt-2">
+                                                <li>Jio_BP Data Transfer: <span class="badge bg-{% if ui_features.get('show_jio_bp_data_transfer', True) %}success">Enabled{% else %}danger">Disabled{% endif %}</span></li>
+                                                <li>MSIL Data Transfer: <span class="badge bg-{% if ui_features.get('show_msil_data_transfer', True) %}success">Enabled{% else %}danger">Disabled{% endif %}</span></li>
+                                                <li>CZ Data Transfer: <span class="badge bg-{% if ui_features.get('show_cz_data_transfer', True) %}success">Enabled{% else %}danger">Disabled{% endif %}</span></li>
+                                            </ul>
+                                        </div>
+                                        <small class="text-muted">
+                                            <i class="bi bi-info-circle"></i>
+                                            These settings are stored in the <code>[UI_FEATURES]</code> section of config.ini
+                                        </small>
                                     </div>
                                 </div>
                             </div>
@@ -528,7 +947,868 @@
         </div>
     </div>
 
+    <!-- Raw Message Modal -->
+    <div class="modal fade" id="rawMessageModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-code-slash"></i> Send Raw WebSocket Message
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <strong>⚠️ Advanced Feature - Use with Caution ⚠️</strong>
+                        <p class="mb-0 mt-2">This feature sends raw WebSocket messages without any OCPP validation. Use only for testing custom packets or debugging. Invalid messages may cause unexpected charger behavior.</p>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Raw Message (JSON)</label>
+                        <textarea class="form-control" id="rawMessageContent" rows="8" placeholder='Enter raw WebSocket message, e.g.:
+[2, "unique-id", "DataTransfer", {"vendorId": "Custom", "messageId": "Test", "data": "custom-data"}]
+
+Or any other valid OCPP WebSocket frame...'></textarea>
+                        <small class="form-text text-muted">
+                            <strong>Format:</strong> OCPP WebSocket messages are JSON arrays: [MessageType, MessageId, Action, Payload]
+                            <br><strong>MessageType:</strong> 2=CALL, 3=CALLRESULT, 4=CALLERROR
+                        </small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Message Examples</label>
+                        <div class="btn-group w-100 mb-2" role="group">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="loadRawMessageExample('dataTransfer')">DataTransfer</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="loadRawMessageExample('getConfiguration')">GetConfiguration</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="loadRawMessageExample('reset')">Reset</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="loadRawMessageExample('custom')">Custom</button>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>Common OCPP Actions:</strong> BootNotification, StatusNotification, Heartbeat, StartTransaction, StopTransaction, DataTransfer, GetConfiguration, ChangeConfiguration, Reset, RemoteStartTransaction, RemoteStopTransaction
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" onclick="sendRawMessage()">
+                        <i class="bi bi-send"></i> Send Raw Message
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Advanced Function Modals -->
+    
+    <!-- Change Availability Modal -->
+    <div class="modal fade" id="changeAvailabilityModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Change Availability</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Connector ID</label>
+                        <input type="number" class="form-control" id="changeAvailabilityConnectorId" min="0" max="10" value="1">
+                        <small class="form-text text-muted">Use 0 for all connectors</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Availability Type</label>
+                        <select class="form-select" id="changeAvailabilityType">
+                            <option value="Operative">Operative</option>
+                            <option value="Inoperative">Inoperative</option>
+                        </select>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>Change Availability</strong> allows you to make connectors operative or inoperative:
+                        <ul class="mb-0 mt-2">
+                            <li><strong>Operative:</strong> Connector can be used for charging</li>
+                            <li><strong>Inoperative:</strong> Connector is temporarily disabled</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="changeAvailability()">Apply</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reserve Now Modal -->
+    <div class="modal fade" id="reserveNowModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Reserve Now</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Connector ID</label>
+                        <input type="number" class="form-control" id="reserveNowConnectorId" min="1" max="10" value="1">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">ID Tag</label>
+                        <select class="form-select" id="reserveNowIdTag"></select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Reservation ID</label>
+                        <input type="number" class="form-control" id="reserveNowReservationId" min="1" value="1">
+                        <small class="form-text text-muted">Unique identifier for this reservation</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Expiry Date & Time</label>
+                        <input type="datetime-local" class="form-control" id="reserveNowExpiryDate">
+                        <small class="form-text text-muted">
+                            <i class="bi bi-info-circle"></i> 
+                            Enter time in <strong>Local Time</strong> (will be converted to UTC for OCPP)
+                            <br>
+                            <i class="bi bi-clock"></i> 
+                            Current local time: <span id="currentLocalTime"></span>
+                        </small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Parent ID Tag (optional)</label>
+                        <select class="form-select" id="reserveNowParentIdTag">
+                            <option value="">None</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="reserveNow()">Reserve</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cancel Reservation Modal -->
+    <div class="modal fade" id="cancelReservationModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Cancel Reservation</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Reservation ID</label>
+                        <input type="number" class="form-control" id="cancelReservationId" min="1">
+                        <small class="form-text text-muted">Enter the reservation ID to cancel</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" onclick="cancelReservation()">Cancel Reservation</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Reservations Modal -->
+    <div class="modal fade" id="reservationsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Active Reservations</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="reservationsList" class="list-group">
+                        <!-- Reservations will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Set Charging Profile Modal -->
+    <div class="modal fade" id="setChargingProfileModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Set Charging Profile</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Connector ID</label>
+                                <input type="number" class="form-control" id="setProfileConnectorId" min="0" max="10" value="1">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Profile ID</label>
+                                <input type="number" class="form-control" id="setProfileId" min="1" value="1">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Stack Level</label>
+                                <input type="number" class="form-control" id="setProfileStackLevel" min="0" max="9" value="0">
+                                <small class="form-text text-muted">0 = highest priority</small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Purpose</label>
+                                <select class="form-select" id="setProfilePurpose">
+                                    <option value="ChargePointMaxProfile">Charge Point Max Profile</option>
+                                    <option value="TxDefaultProfile">Transaction Default Profile</option>
+                                    <option value="TxProfile">Transaction Profile</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Kind</label>
+                                <select class="form-select" id="setProfileKind">
+                                    <option value="Absolute">Absolute</option>
+                                    <option value="Recurring">Recurring</option>
+                                    <option value="Relative">Relative</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Transaction ID (optional)</label>
+                                <input type="number" class="form-control" id="setProfileTransactionId">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Valid From (optional)</label>
+                                <input type="datetime-local" class="form-control" id="setProfileValidFrom">
+                                <small class="form-text text-muted">Local time (converted to UTC for OCPP)</small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Valid To (optional)</label>
+                                <input type="datetime-local" class="form-control" id="setProfileValidTo">
+                                <small class="form-text text-muted">Local time (converted to UTC for OCPP)</small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Charging Rate Unit</label>
+                                <select class="form-select" id="setProfileChargingRateUnit">
+                                    <option value="W">Watts (W)</option>
+                                    <option value="A">Amperes (A)</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Duration (seconds, optional)</label>
+                                <input type="number" class="form-control" id="setProfileDuration" min="1">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    <h6>Charging Schedule</h6>
+                    <div class="mb-3">
+                        <label class="form-label">Start Schedule (optional)</label>
+                        <input type="datetime-local" class="form-control" id="setProfileStartSchedule">
+                        <small class="form-text text-muted">Local time (converted to UTC for OCPP)</small>
+                    </div>
+                    
+                    <!-- Multiple Charging Schedule Periods -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label mb-0">Charging Schedule Periods</label>
+                            <button type="button" class="btn btn-sm btn-success" onclick="addChargingPeriod()">
+                                <i class="bi bi-plus-circle"></i> Add Period
+                            </button>
+                        </div>
+                        <small class="form-text text-muted mb-3">Define multiple periods with different charging limits. Each period specifies when (startPeriod in seconds) and at what rate (limit) to charge.</small>
+                        
+                        <div id="chargingPeriods">
+                            <!-- Initial period -->
+                            <div class="charging-period border rounded p-3 mb-2" data-period-index="0">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h6 class="mb-0">Period 1</h6>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeChargingPeriod(0)" style="display: none;">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Start Period (seconds)</label>
+                                        <input type="number" class="form-control period-start" min="0" value="0" step="1">
+                                        <small class="form-text text-muted">Seconds from schedule start</small>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Limit (W or A)</label>
+                                        <input type="number" class="form-control period-limit" min="0.1" value="3200" step="0.1">
+                                        <small class="form-text text-muted">Maximum charging rate</small>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Number of Phases (optional)</label>
+                                        <input type="number" class="form-control period-phases" min="1" max="3" placeholder="Auto">
+                                        <small class="form-text text-muted">1, 2, or 3 phases</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-info mt-2">
+                            <i class="bi bi-info-circle"></i>
+                            <strong>Examples:</strong><br>
+                            • Period 1: Start=0s, Limit=3200W (Start immediately at 3200W)<br>
+                            • Period 2: Start=1800s, Limit=1600W (After 30 minutes, reduce to 1600W)<br>
+                            • Period 3: Start=3600s, Limit=800W (After 1 hour, reduce to 800W)
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="setChargingProfile()">Set Profile</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Clear Charging Profile Modal -->
+    <div class="modal fade" id="clearChargingProfileModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Clear Charging Profile</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Clear Method</label>
+                        <select class="form-select" id="clearProfileMethod" onchange="toggleClearFields()">
+                            <option value="by_id">By Profile ID</option>
+                            <option value="by_purpose">By Purpose</option>
+                            <option value="by_connector">By Connector</option>
+                            <option value="all">All Profiles</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="clearProfileIdField">
+                        <label class="form-label">Profile ID</label>
+                        <input type="number" class="form-control" id="clearProfileId" min="1">
+                    </div>
+                    <div class="mb-3" id="clearProfileConnectorField" style="display: none;">
+                        <label class="form-label">Connector ID</label>
+                        <input type="number" class="form-control" id="clearProfileConnectorId" min="0" max="10">
+                    </div>
+                    <div class="mb-3" id="clearProfilePurposeField" style="display: none;">
+                        <label class="form-label">Purpose</label>
+                        <select class="form-select" id="clearProfilePurpose">
+                            <option value="">All Purposes</option>
+                            <option value="ChargePointMaxProfile">Charge Point Max Profile</option>
+                            <option value="TxDefaultProfile">Transaction Default Profile</option>
+                            <option value="TxProfile">Transaction Profile</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="clearProfileStackLevelField" style="display: none;">
+                        <label class="form-label">Stack Level (optional)</label>
+                        <input type="number" class="form-control" id="clearProfileStackLevel" min="0" max="9">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" onclick="clearChargingProfile()">Clear</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Charging Profiles Modal -->
+    <div class="modal fade" id="chargingProfilesModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Active Charging Profiles</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Filter by Connector ID (optional)</label>
+                        <input type="number" class="form-control" id="viewProfilesConnectorId" min="0" max="10" placeholder="All connectors">
+                        <button class="btn btn-sm btn-outline-primary mt-2" onclick="loadChargingProfiles()">Refresh</button>
+                    </div>
+                    <div id="chargingProfilesList" class="list-group">
+                        <!-- Profiles will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Get Composite Schedule Modal -->
+    <div class="modal fade" id="getCompositeScheduleModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Get Composite Schedule</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Connector ID</label>
+                                <input type="number" class="form-control" id="getScheduleConnectorId" min="1" max="10" value="1">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Duration (seconds)</label>
+                                <input type="number" class="form-control" id="getScheduleDuration" min="1" value="3600">
+                                <small class="form-text text-muted">1 hour = 3600 seconds</small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Charging Rate Unit (optional)</label>
+                                <select class="form-select" id="getScheduleChargingRateUnit">
+                                    <option value="">Auto</option>
+                                    <option value="W">Watts (W)</option>
+                                    <option value="A">Amperes (A)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle"></i>
+                                <strong>Composite Schedule</strong> combines all active charging profiles for a connector into a single effective schedule.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    <div id="compositeScheduleResult" style="display: none;">
+                        <h6>Schedule Result</h6>
+                        <div id="scheduleDetails" class="alert alert-success">
+                            <!-- Schedule details will be shown here -->
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-success" onclick="getCompositeSchedule()">Get Schedule</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Update Firmware Modal -->
+    <div class="modal fade" id="updateFirmwareModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-cloud-arrow-down"></i> Update Firmware
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <strong>Warning:</strong> Firmware updates can take significant time and may temporarily disconnect the charger.
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Firmware Location (URL) *</label>
+                        <input type="url" class="form-control" id="firmwareLocation" placeholder="https://example.com/firmware.bin" required>
+                        <small class="form-text text-muted">URL where the charger can download the firmware file</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Retrieve Date *</label>
+                        <input type="datetime-local" class="form-control" id="firmwareRetrieveDate" required>
+                        <small class="form-text text-muted">When the charger should start downloading the firmware</small>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Retries (optional)</label>
+                                <input type="number" class="form-control" id="firmwareRetries" min="0" max="10" placeholder="3">
+                                <small class="form-text text-muted">Number of retry attempts</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Retry Interval (optional)</label>
+                                <input type="number" class="form-control" id="firmwareRetryInterval" min="1" placeholder="60">
+                                <small class="form-text text-muted">Seconds between retries</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="updateFirmware()">Update Firmware</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Get Diagnostics Modal -->
+    <div class="modal fade" id="getDiagnosticsModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-file-earmark-medical"></i> Get Diagnostics
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>Diagnostics:</strong> The charger will upload diagnostic files to the specified location.
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Upload Location (URL) *</label>
+                        <input type="url" class="form-control" id="diagnosticsLocation" placeholder="https://example.com/upload/diagnostics/" required>
+                        <small class="form-text text-muted">URL where the charger should upload diagnostic files</small>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Start Time (optional)</label>
+                                <input type="datetime-local" class="form-control" id="diagnosticsStartTime">
+                                <small class="form-text text-muted">Start of diagnostic period</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Stop Time (optional)</label>
+                                <input type="datetime-local" class="form-control" id="diagnosticsStopTime">
+                                <small class="form-text text-muted">End of diagnostic period</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Retries (optional)</label>
+                                <input type="number" class="form-control" id="diagnosticsRetries" min="0" max="10" placeholder="3">
+                                <small class="form-text text-muted">Number of retry attempts</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Retry Interval (optional)</label>
+                                <input type="number" class="form-control" id="diagnosticsRetryInterval" min="1" placeholder="60">
+                                <small class="form-text text-muted">Seconds between retries</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-info" onclick="getDiagnostics()">Get Diagnostics</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Unlock Connector Modal -->
+    <div class="modal fade" id="unlockConnectorModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-unlock"></i> Unlock Connector
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <strong>Warning:</strong> This will physically unlock the connector and may interrupt an ongoing charging session.
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Connector ID *</label>
+                        <select class="form-select" id="unlockConnectorId" required>
+                            <option value="">Select connector to unlock</option>
+                            <option value="1">Connector 1</option>
+                            <option value="2">Connector 2</option>
+                            <option value="3">Connector 3</option>
+                            <option value="4">Connector 4</option>
+                            <option value="5">Connector 5</option>
+                            <option value="6">Connector 6</option>
+                            <option value="7">Connector 7</option>
+                            <option value="8">Connector 8</option>
+                            <option value="9">Connector 9</option>
+                            <option value="10">Connector 10</option>
+                        </select>
+                        <small class="form-text text-muted">Select which connector to unlock</small>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>Possible responses:</strong>
+                        <ul class="mb-0 mt-2">
+                            <li><strong>Unlocked:</strong> Connector successfully unlocked</li>
+                            <li><strong>UnlockFailed:</strong> Failed to unlock connector</li>
+                            <li><strong>NotSupported:</strong> Charger doesn't support unlocking</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-warning" onclick="unlockConnector()">Unlock Connector</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Jio_BP Settings Modal -->
+    <div class="modal fade" id="jioBpSettingsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title">
+                        <i class="bi bi-arrow-left-right"></i> Jio_BP Auto Data Transfer Settings
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                                                        <div class="alert alert-info">
+                                        <i class="bi bi-info-circle"></i>
+                                        <strong>Auto Data Transfer:</strong> When enabled, these packets will be automatically sent to the charger 500ms after sending a StartTransaction response (when charger starts a transaction).
+                                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <!-- Stop Energy Configuration -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="stopEnergyEnabled" onchange="toggleStopEnergyFields()">
+                                        <label class="form-check-label fw-bold" for="stopEnergyEnabled">
+                                            <i class="bi bi-lightning-charge"></i> Stop Energy
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="card-body" id="stopEnergyFields">
+                                    <div class="mb-3">
+                                        <label class="form-label">Energy Limit (kWh)</label>
+                                        <input type="number" class="form-control" id="stopEnergyValue" min="0.1" step="0.1" value="10" disabled>
+                                        <small class="form-text text-muted">
+                                            Packet format: <code>TransactionID_EnergyValue</code><br>
+                                            Example: <code>803060944_10.5</code>
+                                        </small>
+                                    </div>
+                                    <div class="alert alert-light">
+                                        <strong>Vendor ID:</strong> Test_Server<br>
+                                        <strong>Message ID:</strong> Stop_Energy<br>
+                                        <strong>Data:</strong> <span id="stopEnergyPreview">TransactionID_10</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <!-- Stop Time Configuration -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="stopTimeEnabled" onchange="toggleStopTimeFields()">
+                                        <label class="form-check-label fw-bold" for="stopTimeEnabled">
+                                            <i class="bi bi-clock"></i> Stop Time
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="card-body" id="stopTimeFields">
+                                    <div class="mb-3">
+                                        <label class="form-label">Time Limit (minutes)</label>
+                                        <input type="number" class="form-control" id="stopTimeValue" min="1" value="10" disabled>
+                                        <small class="form-text text-muted">
+                                            Packet format: <code>TransactionID_Minutes</code><br>
+                                            Example: <code>803060945_60</code>
+                                        </small>
+                                    </div>
+                                    <div class="alert alert-light">
+                                        <strong>Vendor ID:</strong> Test_Server<br>
+                                        <strong>Message ID:</strong> Stop_Time<br>
+                                        <strong>Data:</strong> <span id="stopTimePreview">TransactionID_10</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                                                            <div class="alert alert-warning">
+                                        <i class="bi bi-exclamation-triangle"></i>
+                                        <strong>Important:</strong> These settings are saved per charger. The data transfer packets will be sent 500ms after the server responds to a StartTransaction from the charger.
+                                    </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-danger" onclick="clearJioBpSettings()">Clear Settings</button>
+                    <button type="button" class="btn btn-warning" onclick="saveJioBpSettings()">Save Settings</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MSIL Settings Modal -->
+    <div class="modal fade" id="msilSettingsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title">
+                        <i class="bi bi-arrow-left-right"></i> MSIL Auto Data Transfer Settings
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>MSIL Auto Data Transfer:</strong> When enabled, AutoStop packets will be automatically sent to the charger 500ms after sending a StartTransaction response.
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="msilAutoStopEnabled" onchange="toggleMsilFields()">
+                                <label class="form-check-label fw-bold" for="msilAutoStopEnabled">
+                                    <i class="bi bi-lightning-charge"></i> AutoStop Energy Limit
+                                </label>
+                            </div>
+                        </div>
+                        <div class="card-body" id="msilFields">
+                            <div class="mb-3">
+                                <label class="form-label">Energy Limit (Wh)</label>
+                                <input type="number" class="form-control" id="msilEnergyValue" min="1" value="1000" disabled>
+                                <small class="form-text text-muted">
+                                    Data format (object): <code>{"transactionId": 71246, "parameter": "Stop_Energy", "value": 1000}</code>
+                                </small>
+                            </div>
+                            <div class="alert alert-light">
+                                <strong>Vendor ID:</strong> MSIL<br>
+                                <strong>Message ID:</strong> AutoStop<br>
+                                <strong>Data:</strong> <span id="msilPreview">{"transactionId": TransactionID, "parameter": "Stop_Energy", "value": 1000}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            <strong>Important:</strong> These settings are saved per charger. The data transfer packets will be sent 500ms after the server responds to a StartTransaction from the charger.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-danger" onclick="clearMsilSettings()">Clear Settings</button>
+                    <button type="button" class="btn btn-info" onclick="saveMsilSettings()">Save Settings</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CZ Settings Modal -->
+    <div class="modal fade" id="czSettingsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">
+                        <i class="bi bi-arrow-left-right"></i> CZ Auto Data Transfer Settings
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>CZ Auto Data Transfer:</strong> When enabled, AutoStop packets will be automatically sent to the charger 500ms after sending a StartTransaction response.
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="czAutoStopEnabled" onchange="toggleCzFields()">
+                                <label class="form-check-label fw-bold" for="czAutoStopEnabled">
+                                    <i class="bi bi-lightning-charge"></i> AutoStop Energy Limit
+                                </label>
+                            </div>
+                        </div>
+                        <div class="card-body" id="czFields">
+                            <div class="mb-3">
+                                <label class="form-label">Energy Limit (Wh)</label>
+                                <input type="number" class="form-control" id="czEnergyValue" min="1" value="2000" disabled>
+                                <small class="form-text text-muted">
+                                    Data format (string): <code>"{\"transactionId\":79333,\"parameter\":\"Stop_Energy\",\"value\":2000}"</code>
+                                </small>
+                            </div>
+                            <div class="alert alert-light">
+                                <strong>Vendor ID:</strong> CZ<br>
+                                <strong>Message ID:</strong> AutoStop<br>
+                                <strong>Data:</strong> <span id="czPreview">"{\"transactionId\":TransactionID,\"parameter\":\"Stop_Energy\",\"value\":2000}"</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            <strong>Important:</strong> These settings are saved per charger. The data transfer packets will be sent 500ms after the server responds to a StartTransaction from the charger.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-danger" onclick="clearCzSettings()">Clear Settings</button>
+                    <button type="button" class="btn btn-success" onclick="saveCzSettings()">Save Settings</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
+    <!-- Delete Charger Confirmation Modal -->
+    <div class="modal fade" id="deleteChargerModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title">
+                        <i class="bi bi-trash"></i> Delete Charger
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <strong>WARNING:</strong> This action cannot be undone!
+                    </div>
+                    
+                    <p>You are about to permanently delete charger <strong id="deleteChargerName">-</strong> and ALL its associated data including:</p>
+                    
+                    <ul>
+                        <li><i class="bi bi-file-text"></i> All logs (up to 5000 entries)</li>
+                        <li><i class="bi bi-gear"></i> Configuration settings</li>
+                        <li><i class="bi bi-battery-charging"></i> Charging profiles</li>
+                        <li><i class="bi bi-calendar"></i> Reservations</li>
+                        <li><i class="bi bi-arrow-left-right"></i> Data transfer settings</li>
+                        <li><i class="bi bi-activity"></i> Connection history</li>
+                        <li><i class="bi bi-database"></i> All database records</li>
+                    </ul>
+                    
+                    <div class="form-check mt-3">
+                        <input class="form-check-input" type="checkbox" id="confirmDelete">
+                        <label class="form-check-label" for="confirmDelete">
+                            I understand this action is permanent and cannot be undone
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteBtn" onclick="deleteCharger()" disabled>
+                        <i class="bi bi-trash"></i> DELETE PERMANENTLY
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="/static/app.js?v=3"></script>
+    <script src="/static/app.js?v=12"></script>
 </body>
 </html> 

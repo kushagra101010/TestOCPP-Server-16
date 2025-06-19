@@ -1,0 +1,164 @@
+[
+  {
+    "test": "Server Main Page",
+    "status": "PASS",
+    "details": "Server is accessible",
+    "timestamp": "2025-06-19T16:08:28.544570"
+  },
+  {
+    "test": "Chargers API",
+    "status": "PASS",
+    "details": "Found 1 chargers",
+    "timestamp": "2025-06-19T16:08:30.581903"
+  },
+  {
+    "test": "Logs Retrieval",
+    "status": "PASS",
+    "details": "Retrieved 332 logs for kushagra01",
+    "timestamp": "2025-06-19T16:08:33.620338"
+  },
+  {
+    "test": "Log Structure",
+    "status": "PASS",
+    "details": "Logs have correct structure",
+    "timestamp": "2025-06-19T16:08:33.620338"
+  },
+  {
+    "test": "Add ID Tag",
+    "status": "FAIL",
+    "details": "HTTP 404",
+    "timestamp": "2025-06-19T16:08:36.672734"
+  },
+  {
+    "test": "Get ID Tags",
+    "status": "FAIL",
+    "details": "HTTP 404",
+    "timestamp": "2025-06-19T16:08:38.688674"
+  },
+  {
+    "test": "Delete ID Tag",
+    "status": "FAIL",
+    "details": "HTTP 404",
+    "timestamp": "2025-06-19T16:08:40.723201"
+  },
+  {
+    "test": "RemoteStartTransaction",
+    "status": "FAIL",
+    "details": "HTTP 500",
+    "timestamp": "2025-06-19T16:08:43.814366"
+  },
+  {
+    "test": "Get Active Transactions",
+    "status": "FAIL",
+    "details": "HTTP 404",
+    "timestamp": "2025-06-19T16:08:47.847253"
+  },
+  {
+    "test": "GetConfiguration",
+    "status": "FAIL",
+    "details": "HTTP 405",
+    "timestamp": "2025-06-19T16:08:50.874356"
+  },
+  {
+    "test": "ChangeConfiguration",
+    "status": "FAIL",
+    "details": "HTTP 404",
+    "timestamp": "2025-06-19T16:08:52.900911"
+  },
+  {
+    "test": "ClearCache",
+    "status": "FAIL",
+    "details": "HTTP 404",
+    "timestamp": "2025-06-19T16:08:55.948260"
+  },
+  {
+    "test": "Reset (Soft)",
+    "status": "FAIL",
+    "details": "HTTP 404",
+    "timestamp": "2025-06-19T16:08:57.976216"
+  },
+  {
+    "test": "GetLocalListVersion",
+    "status": "FAIL",
+    "details": "HTTP 405",
+    "timestamp": "2025-06-19T16:09:01.025780"
+  },
+  {
+    "test": "SendLocalList",
+    "status": "FAIL",
+    "details": "HTTP 404",
+    "timestamp": "2025-06-19T16:09:03.060264"
+  },
+  {
+    "test": "TriggerMessage",
+    "status": "FAIL",
+    "details": "HTTP 404",
+    "timestamp": "2025-06-19T16:09:06.085154"
+  },
+  {
+    "test": "ChangeAvailability",
+    "status": "FAIL",
+    "details": "HTTP 422",
+    "timestamp": "2025-06-19T16:09:09.128022"
+  },
+  {
+    "test": "ReserveNow",
+    "status": "FAIL",
+    "details": "HTTP 404",
+    "timestamp": "2025-06-19T16:09:12.148769"
+  },
+  {
+    "test": "SetChargingProfile",
+    "status": "FAIL",
+    "details": "HTTP 500",
+    "timestamp": "2025-06-19T16:09:15.161310"
+  },
+  {
+    "test": "ClearChargingProfile",
+    "status": "FAIL",
+    "details": "HTTP 500",
+    "timestamp": "2025-06-19T16:09:17.196529"
+  },
+  {
+    "test": "UpdateFirmware",
+    "status": "FAIL",
+    "details": "HTTP 404",
+    "timestamp": "2025-06-19T16:09:20.217052"
+  },
+  {
+    "test": "GetDiagnostics",
+    "status": "FAIL",
+    "details": "HTTP 404",
+    "timestamp": "2025-06-19T16:09:22.245385"
+  },
+  {
+    "test": "DataTransfer",
+    "status": "FAIL",
+    "details": "HTTP 404",
+    "timestamp": "2025-06-19T16:09:25.280272"
+  },
+  {
+    "test": "UnlockConnector",
+    "status": "FAIL",
+    "details": "HTTP 404",
+    "timestamp": "2025-06-19T16:09:28.305127"
+  },
+  {
+    "test": "Log Message Types",
+    "status": "PASS",
+    "details": "Found 4 different message types: ClearCache, BootNotification, StatusNotification, Heartbeat",
+    "timestamp": "2025-06-19T16:09:31.335440"
+  },
+  {
+    "test": "Log Volume",
+    "status": "PASS",
+    "details": "Sufficient logs (332) for filtering tests",
+    "timestamp": "2025-06-19T16:09:31.335440"
+  },
+  {
+    "test": "Get UI Features",
+    "status": "FAIL",
+    "details": "HTTP 404",
+    "timestamp": "2025-06-19T16:09:34.367675"
+  }
+]

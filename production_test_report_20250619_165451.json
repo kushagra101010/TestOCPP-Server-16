@@ -1,0 +1,70 @@
+{
+  "test_session": {
+    "start_time": "2025-06-19T16:54:27.716638",
+    "end_time": "2025-06-19T16:54:51.857916",
+    "charger_id": "kushagra01",
+    "server_url": "http://localhost:8000"
+  },
+  "summary": {
+    "total_tests": 9,
+    "passed": 8,
+    "failed": 1,
+    "success_rate": 88.88888888888889
+  },
+  "detailed_results": [
+    {
+      "test": "Server Connectivity",
+      "status": "PASS",
+      "details": "Server responsive, 19 chargers found",
+      "timestamp": "2025-06-19T16:54:29.787011"
+    },
+    {
+      "test": "Charger Status",
+      "status": "PASS",
+      "details": "Status: Preparing, Connected: True",
+      "timestamp": "2025-06-19T16:54:31.839959"
+    },
+    {
+      "test": "Charger Logs",
+      "status": "PASS",
+      "details": "Retrieved 696 logs",
+      "timestamp": "2025-06-19T16:54:33.902228"
+    },
+    {
+      "test": "ID Tag Management",
+      "status": "PASS",
+      "details": "CRUD operations successful",
+      "timestamp": "2025-06-19T16:54:40.097827"
+    },
+    {
+      "test": "TriggerMessage",
+      "status": "PASS",
+      "details": "Status: Accepted",
+      "timestamp": "2025-06-19T16:54:42.237971"
+    },
+    {
+      "test": "GetConfiguration",
+      "status": "PASS",
+      "details": "Retrieved 47 config items",
+      "timestamp": "2025-06-19T16:54:45.046630"
+    },
+    {
+      "test": "ClearCache",
+      "status": "PASS",
+      "details": "Status: Accepted",
+      "timestamp": "2025-06-19T16:54:47.666939"
+    },
+    {
+      "test": "UI Features",
+      "status": "PASS",
+      "details": "Retrieved 2 features",
+      "timestamp": "2025-06-19T16:54:49.732501"
+    },
+    {
+      "test": "RemoteStartTransaction",
+      "status": "FAIL",
+      "details": "Exception: 'bool' object has no attribute 'get'",
+      "timestamp": "2025-06-19T16:54:51.857916"
+    }
+  ]
+}

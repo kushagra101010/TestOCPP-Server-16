@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, Request, Response
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union
 from pydantic import BaseModel
 import json
 import logging
@@ -9,6 +9,7 @@ import traceback
 from .charger_store import charger_store
 from .ocpp_handler import ChargePoint
 from .database import db
+from .config import config
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -32,7 +33,7 @@ class RemoteStopRequest(BaseModel):
 class DataTransferRequest(BaseModel):
     vendor_id: str
     message_id: Optional[str] = None
-    data: Optional[str] = None
+    data: Optional[Union[str, Dict]] = None  # Allow both string and object for MSIL
 
 class DataTransferPacketRequest(BaseModel):
     name: str
@@ -239,18 +240,104 @@ async def get_chargers():
         logger.debug(f"Processing charger: {charger.charge_point_id}, status: {charger.status}")
         charger_ids_in_db.add(charger.charge_point_id)
         is_ws_connected = charger.charge_point_id in charge_points
-        logger.info(f"Charger {charger.charge_point_id}: WebSocket connected = {is_ws_connected}")
+        
+        # Enhanced connection detection: Check for recent activity if WebSocket tracking is missing
+        is_recently_active = False
+        if not is_ws_connected and charger.logs:
+            # Check if there are recent logs (within last 60 seconds)
+            from datetime import datetime, timedelta
+            current_time = datetime.utcnow()
+            recent_threshold = current_time - timedelta(seconds=60)
+            
+            for log in reversed(charger.logs[-10:]):  # Check last 10 logs
+                try:
+                    log_time_str = log.get('timestamp', '')
+                    if log_time_str:
+                        # Parse log timestamp (remove 'Z' if present)
+                        log_time_str = log_time_str.replace('Z', '')
+                        log_time = datetime.fromisoformat(log_time_str)
+                        
+                        if log_time > recent_threshold:
+                            # Check if it's an OCPP message (not just system messages)
+                            message = log.get('message', '')
+                            if ('WebSocket' in message and 'Frame:' in message) or 'received' in message.lower():
+                                is_recently_active = True
+                                logger.info(f"Charger {charger.charge_point_id}: Found recent activity at {log_time_str}")
+                                break
+                except Exception as e:
+                    logger.debug(f"Error parsing log timestamp: {e}")
+                    continue
+        
+        # Final connection status: WebSocket connected OR recently active
+        is_connected = is_ws_connected or is_recently_active
+        
+        logger.info(f"Charger {charger.charge_point_id}: WebSocket={is_ws_connected}, RecentActivity={is_recently_active}, Final={is_connected}")
         
         # Status logic: 
-        # - If WebSocket is connected: show the actual status from StatusNotification
-        # - If WebSocket is disconnected: show "Disconnected"
-        display_status = charger.status if is_ws_connected else "Disconnected"
+        # - If connected: show the actual status from StatusNotification (prefer recent logs if more current)
+        # - If disconnected: show "Disconnected"
+        display_status = charger.status if is_connected else "Disconnected"
+        
+        # If connected, find the latest StatusNotification in logs by timestamp
+        if is_connected and charger.logs:
+            latest_status = None
+            latest_timestamp = None
+            
+            # Scan ALL logs to find the actual latest StatusNotification by timestamp
+            for log in charger.logs:
+                try:
+                    message = log.get('message', '')
+                    if 'StatusNotification:' in message and 'status=' in message:
+                        # Extract status from StatusNotification log
+                        import re
+                        status_match = re.search(r'status=([^,\s]+)', message)
+                        if status_match:
+                            candidate_status = status_match.group(1)
+                            valid_statuses = ['Available', 'Preparing', 'Charging', 'SuspendedEVSE', 
+                                            'SuspendedEV', 'Finishing', 'Reserved', 'Unavailable', 'Faulted']
+                            if candidate_status in valid_statuses:
+                                log_timestamp = log.get('timestamp')
+                                if log_timestamp:
+                                    # Parse timestamp to compare (handle both with and without 'Z')
+                                    from datetime import datetime
+                                    try:
+                                        if log_timestamp.endswith('Z'):
+                                            parsed_time = datetime.fromisoformat(log_timestamp.replace('Z', '+00:00'))
+                                        else:
+                                            parsed_time = datetime.fromisoformat(log_timestamp)
+                                        
+                                        # Keep track of the latest StatusNotification
+                                        if latest_timestamp is None or parsed_time > latest_timestamp:
+                                            latest_status = candidate_status
+                                            latest_timestamp = parsed_time
+                                            logger.debug(f"Found StatusNotification for {charger.charge_point_id}: {candidate_status} at {log_timestamp}")
+                                    except ValueError as ve:
+                                        logger.debug(f"Could not parse timestamp {log_timestamp}: {ve}")
+                                        continue
+                except Exception as e:
+                    logger.debug(f"Error parsing status from log: {e}")
+                    continue
+            
+            # Use the latest status from logs as display status
+            if latest_status:
+                if latest_status != charger.status:
+                    logger.info(f"Using latest StatusNotification '{latest_status}' for {charger.charge_point_id} (at {latest_timestamp}) instead of database status '{charger.status}'")
+                    display_status = latest_status
+                    
+                    # Update database with the latest status for consistency
+                    charger.status = latest_status
+                    db.session.commit()
+                else:
+                    # Status matches, use it
+                    display_status = latest_status
         
         charger_data = {
             "id": charger.charge_point_id,
             "status": display_status,
             "last_seen": charger.last_heartbeat.isoformat() if charger.last_heartbeat else None,
-            "connected": is_ws_connected  # Primary indicator: active WebSocket connection
+            "connected": is_connected,  # Enhanced: WebSocket connection OR recent activity
+            "websocket_connected": is_ws_connected,  # True WebSocket connection status
+            "recently_active": is_recently_active  # Recent activity indicator
         }
         result.append(charger_data)
         logger.info(f"Charger {charger.charge_point_id} data: {charger_data}")
@@ -263,7 +350,9 @@ async def get_chargers():
                 "id": charge_point_id,
                 "status": "Available",  # Default status for WebSocket-only chargers
                 "last_seen": None,
-                "connected": True  # Has active WebSocket connection
+                "connected": True,  # Has active WebSocket connection
+                "websocket_connected": True,  # True WebSocket connection status
+                "recently_active": False  # Not recently active, actively connected
             }
             result.append(charger_data)
     
@@ -273,17 +362,56 @@ async def get_chargers():
 @router.post("/api/send/{charge_point_id}/remote_start")
 async def remote_start_transaction(charge_point_id: str, request: RemoteStartRequest):
     """Send RemoteStartTransaction request."""
-    if charge_point_id not in charge_points:
-        raise HTTPException(status_code=404, detail="Charger not connected")
     
-    try:
-        logger.info(f"Sending remote start to {charge_point_id} with id_tag={request.id_tag}, connector_id={request.connector_id}")
-        response = await charge_points[charge_point_id].remote_start_transaction(request.connector_id, request.id_tag)
-        logger.info(f"Remote start response from {charge_point_id}: {response}")
-        return {"status": "success", "response": response}
-    except Exception as e:
-        logger.error(f"Remote start error for {charge_point_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    # First check if charger is in charge_points (preferred method)
+    if charge_point_id in charge_points:
+        try:
+            logger.info(f"Sending remote start to {charge_point_id} with id_tag={request.id_tag}, connector_id={request.connector_id}")
+            response = await charge_points[charge_point_id].remote_start_transaction(request.connector_id, request.id_tag)
+            logger.info(f"Remote start response from {charge_point_id}: {response}")
+            return {"status": "success", "response": response}
+        except Exception as e:
+            logger.error(f"Remote start error for {charge_point_id}: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    # If not in charge_points, check if charger has recent activity (heartbeats)
+    # This handles the case where WebSocket is active but not properly tracked
+    charger = charger_store.get_charger(charge_point_id)
+    if charger:
+        # Check for recent heartbeats (within last 60 seconds)
+        from datetime import datetime, timedelta
+        current_time = datetime.utcnow()
+        recent_threshold = current_time - timedelta(seconds=60)
+        
+        has_recent_heartbeats = False
+        if charger.logs:
+            for log in reversed(charger.logs[-10:]):  # Check last 10 logs
+                try:
+                    log_time_str = log.get('timestamp', '')
+                    if log_time_str and 'Heartbeat received' in log.get('message', ''):
+                        log_time = datetime.fromisoformat(log_time_str.replace('Z', ''))
+                        if log_time > recent_threshold:
+                            has_recent_heartbeats = True
+                            logger.info(f"Found recent heartbeat for {charge_point_id} at {log_time_str}")
+                            break
+                except Exception as e:
+                    logger.debug(f"Error parsing log timestamp: {e}")
+                    continue
+        
+        if has_recent_heartbeats:
+            raise HTTPException(
+                status_code=503, 
+                detail=f"Charger '{charge_point_id}' is receiving heartbeats but not properly tracked in WebSocket connections. "
+                       f"This indicates a server-side tracking issue. Please try again or restart the charger connection."
+            )
+        else:
+            raise HTTPException(
+                status_code=503, 
+                detail=f"Charger '{charge_point_id}' is not actively connected via WebSocket. "
+                       f"Current status: {charger.status}. Please ensure the charger is online and has an active connection."
+            )
+    else:
+        raise HTTPException(status_code=404, detail="Charger not found")
 
 @router.post("/api/send/{charge_point_id}/remote_stop")
 async def remote_stop_transaction(charge_point_id: str, request: RemoteStopRequest):
@@ -478,12 +606,22 @@ async def data_transfer(charge_point_id: str, request: DataTransferRequest):
         raise HTTPException(status_code=404, detail="Charger not connected")
     
     try:
-        response = await charge_points[charge_point_id].data_transfer(
-            vendor_id=request.vendor_id,
-            message_id=request.message_id,
-            data=request.data
-        )
-        return {"status": "success", "response": response}
+        # Special handling for MSIL - send as object (OCPP violation)
+        if request.vendor_id == "MSIL" and isinstance(request.data, dict):
+            logger.info(f"Sending MSIL DataTransfer with object data (OCPP violation)")
+            response = await charge_points[charge_point_id]._send_msil_packet(
+                message_id=request.message_id,
+                data=request.data
+            )
+            return {"status": "success", "response": {"status": "Accepted" if response else "Rejected"}}
+        else:
+            # Standard OCPP-compliant DataTransfer (string data)
+            response = await charge_points[charge_point_id].data_transfer(
+                vendor_id=request.vendor_id,
+                message_id=request.message_id,
+                data=request.data
+            )
+            return {"status": "success", "response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -582,11 +720,728 @@ async def create_data_transfer_packet(request: DataTransferPacketRequest):
 
 @router.delete("/api/data_transfer_packets/{packet_id}")
 async def delete_data_transfer_packet(packet_id: int):
-    """Delete a data transfer packet."""
+    """Delete a data transfer packet template."""
     try:
-        if db.delete_data_transfer_packet(packet_id):
-            return {"status": "success", "message": f"Deleted packet: {packet_id}"}
-        raise HTTPException(status_code=404, detail="Packet not found")
+        success = db.delete_data_transfer_packet(packet_id)
+        if success:
+            return {"message": f"Data transfer packet {packet_id} deleted successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Data transfer packet not found")
     except Exception as e:
         logger.error(f"Error deleting data transfer packet: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# === NEW REQUEST MODELS FOR ADVANCED FUNCTIONS ===
+class ChangeAvailabilityRequest(BaseModel):
+    connector_id: int
+    availability_type: str  # "Operative" or "Inoperative"
+
+class ReserveNowRequest(BaseModel):
+    connector_id: int
+    expiry_date: str  # ISO 8601 datetime
+    id_tag: str
+    reservation_id: int
+    parent_id_tag: Optional[str] = None
+
+class CancelReservationRequest(BaseModel):
+    reservation_id: int
+
+class ChargingSchedulePeriod(BaseModel):
+    start_period: int  # Seconds from start of schedule
+    limit: float  # Maximum charging rate limit
+    number_phases: Optional[int] = None
+
+class ChargingSchedule(BaseModel):
+    duration: Optional[int] = None  # Duration in seconds
+    start_schedule: Optional[str] = None  # ISO 8601 datetime
+    charging_rate_unit: str  # "A" for Amperes or "W" for Watts
+    charging_schedule_period: List[ChargingSchedulePeriod]
+    min_charging_rate: Optional[float] = None
+
+class ChargingProfile(BaseModel):
+    charging_profile_id: int
+    transaction_id: Optional[int] = None
+    stack_level: int
+    charging_profile_purpose: str  # "ChargePointMaxProfile", "TxDefaultProfile", "TxProfile"
+    charging_profile_kind: str  # "Absolute", "Recurring", "Relative"
+    recurrency_kind: Optional[str] = None  # "Daily", "Weekly" 
+    valid_from: Optional[str] = None  # ISO 8601 datetime
+    valid_to: Optional[str] = None  # ISO 8601 datetime
+    charging_schedule: ChargingSchedule
+
+class SetChargingProfileRequest(BaseModel):
+    connector_id: int
+    cs_charging_profiles: ChargingProfile
+
+class ClearChargingProfileRequest(BaseModel):
+    id: Optional[int] = None  # Charging profile ID
+    connector_id: Optional[int] = None
+    charging_profile_purpose: Optional[str] = None
+    stack_level: Optional[int] = None
+
+class GetCompositeScheduleRequest(BaseModel):
+    connector_id: int
+    duration: int  # Duration in seconds
+    charging_rate_unit: Optional[str] = None  # "A" or "W"
+
+# === CHANGE AVAILABILITY ENDPOINTS ===
+@router.post("/api/send/{charge_point_id}/change_availability")
+async def change_availability(charge_point_id: str, request: ChangeAvailabilityRequest):
+    """Send ChangeAvailability command to charger."""
+    try:
+        logger.info(f"ChangeAvailability API called for {charge_point_id}: connector={request.connector_id}, type={request.availability_type}")
+        
+        charge_point = charge_points.get(charge_point_id)
+        if not charge_point:
+            logger.error(f"Charger {charge_point_id} not found in charge_points: {list(charge_points.keys())}")
+            raise HTTPException(status_code=404, detail=f"Charger {charge_point_id} not connected")
+        
+        logger.info(f"Calling change_availability method for {charge_point_id}")
+        response = await charge_point.change_availability(
+            connector_id=request.connector_id,
+            availability_type=request.availability_type
+        )
+        logger.info(f"ChangeAvailability response received: {response}")
+        
+        if response:
+            return {
+                "status": "success",
+                "message": f"ChangeAvailability command sent to {charge_point_id}",
+                "response": {
+                    "status": getattr(response, 'status', 'Unknown')
+                }
+            }
+        else:
+            logger.error(f"ChangeAvailability returned None for {charge_point_id}")
+            raise HTTPException(status_code=500, detail="Failed to send ChangeAvailability command")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Exception in ChangeAvailability API for {charge_point_id}: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"500: Failed to send ChangeAvailability command")
+
+# === RESERVATION ENDPOINTS ===
+@router.post("/api/send/{charge_point_id}/reserve_now")
+async def reserve_now(charge_point_id: str, request: ReserveNowRequest):
+    """Send ReserveNow command to charger."""
+    try:
+        logger.info(f"ReserveNow API called for {charge_point_id}: connector={request.connector_id}, reservation_id={request.reservation_id}")
+        
+        charge_point = charge_points.get(charge_point_id)
+        if not charge_point:
+            logger.error(f"Charger {charge_point_id} not found in charge_points: {list(charge_points.keys())}")
+            raise HTTPException(status_code=404, detail=f"Charger {charge_point_id} not connected")
+        
+        logger.info(f"Calling reserve_now method for {charge_point_id}")
+        response = await charge_point.reserve_now(
+            connector_id=request.connector_id,
+            expiry_date=request.expiry_date,
+            id_tag=request.id_tag,
+            reservation_id=request.reservation_id,
+            parent_id_tag=request.parent_id_tag
+        )
+        logger.info(f"ReserveNow response received: {response}")
+        
+        if response:
+            return {
+                "status": "success",
+                "message": f"ReserveNow command sent to {charge_point_id}",
+                "response": {
+                    "status": getattr(response, 'status', 'Unknown')
+                }
+            }
+        else:
+            logger.error(f"ReserveNow returned None for {charge_point_id}")
+            raise HTTPException(status_code=500, detail="Failed to send ReserveNow command")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Exception in ReserveNow API for {charge_point_id}: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"500: Failed to send ReserveNow command")
+
+@router.post("/api/send/{charge_point_id}/cancel_reservation")
+async def cancel_reservation(charge_point_id: str, request: CancelReservationRequest):
+    """Send CancelReservation command to charger."""
+    try:
+        charge_point = charge_points.get(charge_point_id)
+        if not charge_point:
+            raise HTTPException(status_code=404, detail=f"Charger {charge_point_id} not connected")
+        
+        response = await charge_point.cancel_reservation(reservation_id=request.reservation_id)
+        
+        if response:
+            return {
+                "status": "success",
+                "message": f"CancelReservation command sent to {charge_point_id}",
+                "response": {
+                    "status": getattr(response, 'status', 'Unknown')
+                }
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to send CancelReservation command")
+    except Exception as e:
+        logger.error(f"Error sending CancelReservation to {charge_point_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/reservations/{charge_point_id}")
+async def get_reservations(charge_point_id: str):
+    """Get active reservations for a charger."""
+    try:
+        reservations = charger_store.get_reservations(charge_point_id)
+        return {
+            "charge_point_id": charge_point_id,
+            "reservations": reservations
+        }
+    except Exception as e:
+        logger.error(f"Error getting reservations for {charge_point_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# === SMART CHARGING ENDPOINTS ===
+@router.post("/api/send/{charge_point_id}/set_charging_profile")
+async def set_charging_profile(charge_point_id: str, request: SetChargingProfileRequest):
+    """Send SetChargingProfile command to charger."""
+    try:
+        charge_point = charge_points.get(charge_point_id)
+        if not charge_point:
+            raise HTTPException(status_code=404, detail=f"Charger {charge_point_id} not connected")
+        
+        # Convert Pydantic model to dict for OCPP library
+        charging_profile_dict = request.cs_charging_profiles.dict()
+        
+        response = await charge_point.set_charging_profile(
+            connector_id=request.connector_id,
+            charging_profile=charging_profile_dict
+        )
+        
+        if response:
+            return {
+                "status": "success",
+                "message": f"SetChargingProfile command sent to {charge_point_id}",
+                "response": {
+                    "status": getattr(response, 'status', 'Unknown')
+                }
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to send SetChargingProfile command")
+    except Exception as e:
+        logger.error(f"Error sending SetChargingProfile to {charge_point_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/send/{charge_point_id}/clear_charging_profile")
+async def clear_charging_profile(charge_point_id: str, request: ClearChargingProfileRequest):
+    """Send ClearChargingProfile command to charger."""
+    try:
+        charge_point = charge_points.get(charge_point_id)
+        if not charge_point:
+            raise HTTPException(status_code=404, detail=f"Charger {charge_point_id} not connected")
+        
+        response = await charge_point.clear_charging_profile(
+            profile_id=request.id,
+            connector_id=request.connector_id,
+            charging_profile_purpose=request.charging_profile_purpose,
+            stack_level=request.stack_level
+        )
+        
+        if response:
+            return {
+                "status": "success",
+                "message": f"ClearChargingProfile command sent to {charge_point_id}",
+                "response": {
+                    "status": getattr(response, 'status', 'Unknown')
+                }
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to send ClearChargingProfile command")
+    except Exception as e:
+        logger.error(f"Error sending ClearChargingProfile to {charge_point_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/charging_profiles/{charge_point_id}")
+async def get_charging_profiles(charge_point_id: str, connector_id: Optional[int] = None):
+    """Get charging profiles for a charger."""
+    try:
+        profiles = charger_store.get_charging_profiles(charge_point_id, connector_id)
+        return {
+            "charge_point_id": charge_point_id,
+            "connector_id": connector_id,
+            "charging_profiles": profiles
+        }
+    except Exception as e:
+        logger.error(f"Error getting charging profiles for {charge_point_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/send/{charge_point_id}/get_composite_schedule")
+async def get_composite_schedule(charge_point_id: str, request: GetCompositeScheduleRequest):
+    """Send GetCompositeSchedule command to charger."""
+    try:
+        charge_point = charge_points.get(charge_point_id)
+        if not charge_point:
+            raise HTTPException(status_code=404, detail=f"Charger {charge_point_id} not connected")
+        
+        response = await charge_point.get_composite_schedule(
+            connector_id=request.connector_id,
+            duration=request.duration,
+            charging_rate_unit=request.charging_rate_unit
+        )
+        
+        if response:
+            # Parse the response to provide more detailed information
+            result = {
+                "status": "success",
+                "message": f"GetCompositeSchedule command sent to {charge_point_id}",
+                "response": {
+                    "status": getattr(response, 'status', 'Unknown'),
+                    "connector_id": getattr(response, 'connector_id', None),
+                    "schedule_start": getattr(response, 'schedule_start', None),
+                    "charging_schedule": getattr(response, 'charging_schedule', None)
+                }
+            }
+            return result
+        else:
+            raise HTTPException(status_code=500, detail="Failed to send GetCompositeSchedule command")
+    except Exception as e:
+        logger.error(f"Error sending GetCompositeSchedule to {charge_point_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# === JIO_BP DATA TRANSFER ENDPOINTS ===
+class JioBpSettingsRequest(BaseModel):
+    stop_energy_enabled: bool = False
+    stop_energy_value: float = 10.0
+    stop_time_enabled: bool = False
+    stop_time_value: int = 10
+
+# === MSIL DATA TRANSFER ENDPOINTS ===
+class MsilSettingsRequest(BaseModel):
+    auto_stop_enabled: bool = False
+    stop_energy_value: float = 1000.0  # Energy in Wh
+
+# === CZ DATA TRANSFER ENDPOINTS ===
+class CzSettingsRequest(BaseModel):
+    auto_stop_enabled: bool = False
+    stop_energy_value: float = 2000.0  # Energy in Wh
+
+class UpdateFirmwareRequest(BaseModel):
+    location: str  # URL where firmware is located
+    retrieve_date: str  # ISO 8601 datetime when to retrieve firmware
+    retries: Optional[int] = None  # Number of retries
+    retry_interval: Optional[int] = None  # Retry interval in seconds
+
+class GetDiagnosticsRequest(BaseModel):
+    location: str  # URL where to upload diagnostics
+    retries: Optional[int] = None  # Number of retries
+    retry_interval: Optional[int] = None  # Retry interval in seconds
+    start_time: Optional[str] = None  # ISO 8601 datetime start of diagnostic period
+    stop_time: Optional[str] = None  # ISO 8601 datetime end of diagnostic period
+
+class UnlockConnectorRequest(BaseModel):
+    connector_id: int  # Connector ID to unlock
+
+@router.post("/api/jio_bp_settings/{charge_point_id}")
+async def set_jio_bp_settings(charge_point_id: str, request: JioBpSettingsRequest):
+    """Set Jio_BP data transfer settings for a charger."""
+    try:
+        settings = {
+            'stop_energy_enabled': request.stop_energy_enabled,
+            'stop_energy_value': request.stop_energy_value,
+            'stop_time_enabled': request.stop_time_enabled,
+            'stop_time_value': request.stop_time_value
+        }
+        
+        charger_store.set_jio_bp_settings(charge_point_id, settings)
+        
+        return {
+            "status": "success",
+            "message": f"Jio_BP settings saved for {charge_point_id}",
+            "settings": settings
+        }
+    except Exception as e:
+        logger.error(f"Error setting Jio_BP settings for {charge_point_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/jio_bp_settings/{charge_point_id}")
+async def get_jio_bp_settings(charge_point_id: str):
+    """Get Jio_BP data transfer settings for a charger."""
+    try:
+        settings = charger_store.get_jio_bp_settings(charge_point_id)
+        
+        if settings is None:
+            # Return default settings if none configured
+            settings = {
+                'stop_energy_enabled': False,
+                'stop_energy_value': 10.0,
+                'stop_time_enabled': False,
+                'stop_time_value': 10
+            }
+        
+        return {
+            "charge_point_id": charge_point_id,
+            "settings": settings
+        }
+    except Exception as e:
+        logger.error(f"Error getting Jio_BP settings for {charge_point_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/api/jio_bp_settings/{charge_point_id}")
+async def clear_jio_bp_settings(charge_point_id: str):
+    """Clear Jio_BP data transfer settings for a charger."""
+    try:
+        charger_store.clear_jio_bp_settings(charge_point_id)
+        
+        return {
+            "status": "success",
+            "message": f"Jio_BP settings cleared for {charge_point_id}"
+        }
+    except Exception as e:
+        logger.error(f"Error clearing Jio_BP settings for {charge_point_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/msil_settings/{charge_point_id}")
+async def set_msil_settings(charge_point_id: str, request: MsilSettingsRequest):
+    """Set MSIL data transfer settings for a charger."""
+    try:
+        settings = {
+            'auto_stop_enabled': request.auto_stop_enabled,
+            'stop_energy_value': request.stop_energy_value
+        }
+        
+        charger_store.set_msil_settings(charge_point_id, settings)
+        
+        return {
+            "status": "success",
+            "message": f"MSIL settings saved for {charge_point_id}",
+            "settings": settings
+        }
+    except Exception as e:
+        logger.error(f"Error setting MSIL settings for {charge_point_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/msil_settings/{charge_point_id}")
+async def get_msil_settings(charge_point_id: str):
+    """Get MSIL data transfer settings for a charger."""
+    try:
+        settings = charger_store.get_msil_settings(charge_point_id)
+        
+        if settings is None:
+            # Return default settings if none configured
+            settings = {
+                'auto_stop_enabled': False,
+                'stop_energy_value': 1000.0
+            }
+        
+        return {
+            "charge_point_id": charge_point_id,
+            "settings": settings
+        }
+    except Exception as e:
+        logger.error(f"Error getting MSIL settings for {charge_point_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/api/msil_settings/{charge_point_id}")
+async def clear_msil_settings(charge_point_id: str):
+    """Clear MSIL data transfer settings for a charger."""
+    try:
+        charger_store.clear_msil_settings(charge_point_id)
+        
+        return {
+            "status": "success",
+            "message": f"MSIL settings cleared for {charge_point_id}"
+        }
+    except Exception as e:
+        logger.error(f"Error clearing MSIL settings for {charge_point_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/cz_settings/{charge_point_id}")
+async def set_cz_settings(charge_point_id: str, request: CzSettingsRequest):
+    """Set CZ data transfer settings for a charger."""
+    try:
+        settings = {
+            'auto_stop_enabled': request.auto_stop_enabled,
+            'stop_energy_value': request.stop_energy_value
+        }
+        
+        charger_store.set_cz_settings(charge_point_id, settings)
+        
+        return {
+            "status": "success",
+            "message": f"CZ settings saved for {charge_point_id}",
+            "settings": settings
+        }
+    except Exception as e:
+        logger.error(f"Error setting CZ settings for {charge_point_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/cz_settings/{charge_point_id}")
+async def get_cz_settings(charge_point_id: str):
+    """Get CZ data transfer settings for a charger."""
+    try:
+        settings = charger_store.get_cz_settings(charge_point_id)
+        
+        if settings is None:
+            # Return default settings if none configured
+            settings = {
+                'auto_stop_enabled': False,
+                'stop_energy_value': 2000.0
+            }
+        
+        return {
+            "charge_point_id": charge_point_id,
+            "settings": settings
+        }
+    except Exception as e:
+        logger.error(f"Error getting CZ settings for {charge_point_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/api/cz_settings/{charge_point_id}")
+async def clear_cz_settings(charge_point_id: str):
+    """Clear CZ data transfer settings for a charger."""
+    try:
+        charger_store.clear_cz_settings(charge_point_id)
+        
+        return {
+            "status": "success",
+            "message": f"CZ settings cleared for {charge_point_id}"
+        }
+    except Exception as e:
+        logger.error(f"Error clearing CZ settings for {charge_point_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/send/{charge_point_id}/update_firmware")
+async def update_firmware(charge_point_id: str, request: UpdateFirmwareRequest):
+    """Send UpdateFirmware command to charger."""
+    try:
+        if charge_point_id not in charge_points:
+            raise HTTPException(status_code=404, detail="Charge point not connected")
+        
+        charge_point = charge_points[charge_point_id]
+        
+        # Validate retrieve_date format
+        from datetime import datetime
+        try:
+            datetime.fromisoformat(request.retrieve_date.replace('Z', '+00:00'))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid retrieve_date format. Use ISO 8601 format (e.g., '2024-12-31T10:00:00Z')")
+        
+        response = await charge_point.update_firmware(
+            location=request.location,
+            retrieve_date=request.retrieve_date,
+            retries=request.retries,
+            retry_interval=request.retry_interval
+        )
+        
+        if response:
+            return {"status": "success", "message": "UpdateFirmware command sent successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to send UpdateFirmware command")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in update_firmware API: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/send/{charge_point_id}/get_diagnostics")
+async def get_diagnostics(charge_point_id: str, request: GetDiagnosticsRequest):
+    """Send GetDiagnostics command to charger."""
+    try:
+        if charge_point_id not in charge_points:
+            raise HTTPException(status_code=404, detail="Charge point not connected")
+        
+        charge_point = charge_points[charge_point_id]
+        
+        # Validate datetime formats if provided
+        from datetime import datetime
+        if request.start_time:
+            try:
+                datetime.fromisoformat(request.start_time.replace('Z', '+00:00'))
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid start_time format. Use ISO 8601 format (e.g., '2024-12-31T10:00:00Z')")
+        
+        if request.stop_time:
+            try:
+                datetime.fromisoformat(request.stop_time.replace('Z', '+00:00'))
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid stop_time format. Use ISO 8601 format (e.g., '2024-12-31T10:00:00Z')")
+        
+        response = await charge_point.get_diagnostics(
+            location=request.location,
+            retries=request.retries,
+            retry_interval=request.retry_interval,
+            start_time=request.start_time,
+            stop_time=request.stop_time
+        )
+        
+        if response:
+            return {"status": "success", "message": "GetDiagnostics command sent successfully", "response": response}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to send GetDiagnostics command")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_diagnostics API: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/send/{charge_point_id}/unlock_connector")
+async def unlock_connector(charge_point_id: str, request: UnlockConnectorRequest):
+    """Send UnlockConnector command to charger."""
+    try:
+        if charge_point_id not in charge_points:
+            raise HTTPException(status_code=404, detail="Charge point not connected")
+        
+        charge_point = charge_points[charge_point_id]
+        
+        # Validate connector_id
+        if request.connector_id < 1 or request.connector_id > 10:
+            raise HTTPException(status_code=400, detail="Connector ID must be between 1 and 10")
+        
+        response = await charge_point.unlock_connector(connector_id=request.connector_id)
+        
+        if response:
+            status = getattr(response, 'status', 'Unknown')
+            return {
+                "status": "success", 
+                "message": f"UnlockConnector command sent successfully",
+                "response": {"status": status}
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to send UnlockConnector command")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in unlock_connector API: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# UI Configuration endpoints
+@router.get("/api/config/ui-features")
+async def get_ui_features():
+    """Get current UI feature configuration."""
+    try:
+        ui_features = config.get_ui_features()
+        return {"status": "success", "data": ui_features}
+    except Exception as e:
+        logger.error(f"Error getting UI features: {e}")
+        return {"status": "error", "message": str(e)}
+
+class UIFeaturesRequest(BaseModel):
+    show_jio_bp_data_transfer: Optional[bool] = None
+    show_msil_data_transfer: Optional[bool] = None
+    show_cz_data_transfer: Optional[bool] = None
+
+@router.post("/api/config/ui-features")
+async def update_ui_features(request: UIFeaturesRequest):
+    """Update UI feature configuration."""
+    try:
+        import configparser
+        
+        # Read current config
+        current_config = configparser.ConfigParser()
+        current_config.read("config.ini")
+        
+        # Ensure UI_FEATURES section exists
+        if 'UI_FEATURES' not in current_config:
+            current_config.add_section('UI_FEATURES')
+        
+        # Update values that were provided
+        if request.show_jio_bp_data_transfer is not None:
+            current_config.set('UI_FEATURES', 'show_jio_bp_data_transfer', str(request.show_jio_bp_data_transfer).lower())
+        
+        if request.show_msil_data_transfer is not None:
+            current_config.set('UI_FEATURES', 'show_msil_data_transfer', str(request.show_msil_data_transfer).lower())
+        
+        if request.show_cz_data_transfer is not None:
+            current_config.set('UI_FEATURES', 'show_cz_data_transfer', str(request.show_cz_data_transfer).lower())
+        
+        # Save config
+        with open("config.ini", 'w') as f:
+            current_config.write(f)
+        
+        # Reload config
+        config.load_config()
+        
+        return {"status": "success", "message": "UI features updated successfully. Please refresh the page to see changes."}
+    
+    except Exception as e:
+        logger.error(f"Error updating UI features: {e}")
+        return {"status": "error", "message": str(e)}
+
+class RawMessageRequest(BaseModel):
+    raw_message: str
+
+@router.post("/api/send/{charge_point_id}/raw_message")
+async def send_raw_message(charge_point_id: str, request: RawMessageRequest):
+    """Send raw WebSocket message without any validation."""
+    try:
+        if charge_point_id not in charge_points:
+            raise HTTPException(status_code=404, detail="Charge point not found or not connected")
+        
+        charge_point = charge_points[charge_point_id]
+        
+        # Send raw message (bypasses all OCPP validation)
+        result = await charge_point.send_raw_message(request.raw_message)
+        
+        return {"status": "success", "data": result}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in send_raw_message API: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/api/chargers/{charge_point_id}")
+async def delete_charger(charge_point_id: str):
+    """Delete a charger and all its associated data from the database."""
+    try:
+        from .charger_store import charger_store
+        from .database import SessionLocal, Charger
+        
+        logger.info(f"Attempting to delete charger: {charge_point_id}")
+        
+        # Create a fresh database session to avoid session isolation issues
+        fresh_session = SessionLocal()
+        
+        try:
+            # First, check what chargers exist in the database using the fresh session
+            all_chargers = fresh_session.query(Charger).all()
+            logger.info(f"Available chargers in database: {[c.charge_point_id for c in all_chargers]}")
+            
+            # Find the specific charger
+            charger = fresh_session.query(Charger).filter_by(charge_point_id=charge_point_id).first()
+            
+            if charger:
+                logger.info(f"Found charger {charge_point_id} in database, proceeding with deletion")
+                
+                # Remove from active connections if connected
+                if charge_point_id in charge_points:
+                    del charge_points[charge_point_id]
+                    logger.info(f"Removed {charge_point_id} from active WebSocket connections")
+                
+                # Remove from transaction tracking if it exists
+                if charge_point_id in charger_store.transaction_ids:
+                    del charger_store.transaction_ids[charge_point_id]
+                    logger.info(f"Removed {charge_point_id} from transaction tracking")
+                
+                # Delete from database
+                fresh_session.delete(charger)
+                fresh_session.commit()
+                
+                logger.info(f"Successfully deleted charger: {charge_point_id}")
+                return {"status": "success", "message": f"Charger {charge_point_id} and all its data deleted successfully"}
+            else:
+                logger.warning(f"Charger {charge_point_id} not found in database. Available chargers: {[c.charge_point_id for c in all_chargers]}")
+                raise HTTPException(status_code=404, detail=f"Charger {charge_point_id} not found in database")
+                
+        finally:
+            fresh_session.close()
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting charger {charge_point_id}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e)) 

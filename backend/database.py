@@ -21,6 +21,8 @@ class Charger(Base):
     logs = Column(JSON, default=list)
     connector_status = Column(JSON, default=dict)  # Separate field for connector status
     logs_cleared_at = Column(DateTime, nullable=True)  # Timestamp when logs were last cleared
+    reservations = Column(JSON, default=dict)  # Store active reservations
+    charging_profiles = Column(JSON, default=dict)  # Store charging profiles
     
     def to_dict(self):
         return {
@@ -33,7 +35,9 @@ class Charger(Base):
             'data_transfer_packets': self.data_transfer_packets,
             'logs': self.logs,
             'connector_status': self.connector_status,
-            'logs_cleared_at': self.logs_cleared_at.isoformat() if self.logs_cleared_at else None
+            'logs_cleared_at': self.logs_cleared_at.isoformat() if self.logs_cleared_at else None,
+            'reservations': self.reservations,
+            'charging_profiles': self.charging_profiles
         }
 
 class IdTag(Base):
@@ -103,6 +107,18 @@ try:
         cursor.execute("ALTER TABLE chargers ADD COLUMN logs_cleared_at DATETIME")
         conn.commit()
         print("Added logs_cleared_at column to chargers table")
+    
+    # Check if reservations column exists
+    if 'reservations' not in columns:
+        cursor.execute("ALTER TABLE chargers ADD COLUMN reservations TEXT DEFAULT '{}'")
+        conn.commit()
+        print("Added reservations column to chargers table")
+    
+    # Check if charging_profiles column exists
+    if 'charging_profiles' not in columns:
+        cursor.execute("ALTER TABLE chargers ADD COLUMN charging_profiles TEXT DEFAULT '{}'")
+        conn.commit()
+        print("Added charging_profiles column to chargers table")
         
     conn.close()
 except Exception as e:
