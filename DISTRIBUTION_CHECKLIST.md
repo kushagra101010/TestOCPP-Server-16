@@ -108,5 +108,5 @@ OCPP_Server_v1.6/
 ---
 
 **Distribution Package Version:** 1.0.0  
-**Last Updated:** 2024-12-14  
+**Last Updated:** June 20, 2025  
 **Prepared By:** [Your Name] 

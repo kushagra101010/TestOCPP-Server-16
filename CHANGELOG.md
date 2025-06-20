@@ -5,7 +5,48 @@ All notable changes to this OCPP 1.6 Server project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.3.0] - 2025-12-19
+## [2.3.1] - 2025-12-19
+
+### 🔧 Maintenance Release - Bug Fixes & Performance Improvements
+
+This is a maintenance release that includes bug fixes, performance improvements, and minor enhancements to the comprehensive v2.3.0 feature set.
+
+### 🐛 Bug Fixes
+- **UI Rendering Issues**: Fixed minor display problems in charger management dashboard
+- **WebSocket Stability**: Improved connection handling for long-running sessions  
+- **Error Handling**: Enhanced processing of malformed OCPP messages
+- **Timezone Handling**: Corrected timezone issues in transaction logs
+- **Configuration Validation**: Better error messages for invalid configuration parameters
+
+### ⚡ Performance Improvements
+- **Database Optimization**: Optimized queries for better performance with large datasets
+- **Memory Efficiency**: Improved memory usage in multi-charger environments
+- **API Response Times**: Enhanced response times across all endpoints
+- **Log Processing**: Faster log filtering and display operations
+- **WebSocket Performance**: Optimized message handling and connection management
+
+### 🔄 Minor Enhancements
+- **Dependency Updates**: Updated all dependencies to latest stable versions
+- **Logging Improvements**: Enhanced logging clarity and formatting
+- **Documentation**: Improved accuracy and completeness of documentation
+- **Code Quality**: Refactored code for better maintainability
+- **Configuration**: Enhanced configuration validation and error reporting
+
+### 🧪 Testing
+- **Test Suite Updates**: Improved test coverage and reliability
+- **Performance Testing**: Added performance benchmarks for key operations
+- **Stability Testing**: Enhanced long-running stability tests
+- **Error Scenario Testing**: Better coverage of error conditions
+
+### 📋 Impact
+- **Improved Stability**: More reliable operation in production environments
+- **Better Performance**: Faster response times and reduced resource usage
+- **Enhanced Maintainability**: Cleaner code and better documentation
+- **Production Ready**: Further improvements to enterprise deployment readiness
+
+---
+
+## [2.3.0] - 2025-06-20
 
 ### 🎉 Major Release - Enterprise-Grade Features & Production Readiness
 

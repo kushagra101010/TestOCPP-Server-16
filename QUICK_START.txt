@@ -1,5 +1,5 @@
 ========================================
-    OCPP Server v1.6 - Quick Start
+    OCPP Server v2.3.0 - Quick Start
 ========================================
 
 INSTALLATION (First Time Only):

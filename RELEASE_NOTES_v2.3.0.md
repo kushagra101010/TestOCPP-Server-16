@@ -1,6 +1,6 @@
 # OCPP 1.6 Server v2.3.0 Release Notes
 
-**Release Date:** December 19, 2025  
+**Release Date:** June 20, 2025  
 **Version:** 2.3.0  
 **OCPP Protocol:** 1.6  
 **Release Type:** Major Feature Release  

@@ -1,6 +1,6 @@
 @echo off
 echo ========================================
-echo   OCPP 1.6 Server v2.3.0 - Starting...
+echo   OCPP 1.6 Server v2.3.1 - Starting...
 echo ========================================
 echo.
 
@@ -35,11 +35,11 @@ set ip=%ip: =%
 
 echo.
 echo ========================================
-echo   🚀 OCPP 1.6 Server v2.3.0 Starting! 🚀
+echo   🚀 OCPP 1.6 Server v2.3.1 Starting! 🚀
 echo ========================================
 echo.
 echo ✅ Virtual environment: ACTIVATED
-echo ✅ Server version: v2.3.0 (OCPP 1.6 Protocol)
+echo ✅ Server version: v2.3.1 (OCPP 1.6 Protocol)
 echo ✅ Enterprise-grade features ^& production ready
 echo.
 echo 🌐 Server will be available at:
@@ -62,10 +62,10 @@ echo ========================================
 echo.
 
 REM Start the server
-echo 🚀 Starting OCPP 1.6 Server v2.3.0...
+echo 🚀 Starting OCPP 1.6 Server v2.3.1...
 python start_server.py
 
 echo.
 echo 🛑 Server stopped.
-echo Thank you for using OCPP 1.6 Server v2.3.0!
+echo Thank you for using OCPP 1.6 Server v2.3.1!
 pause 

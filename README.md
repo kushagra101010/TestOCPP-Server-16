@@ -1,37 +1,38 @@
-# OCPP 1.6 Server v2.2.0 - Central Management System
+# OCPP 1.6 Server v2.3.1 - Central Management System
 
 Professional OCPP 1.6 Central Management System (CMS) for EV charging stations with web-based dashboard and real-time monitoring.
 
-![OCPP Server](https://img.shields.io/badge/OCPP-1.6-blue) ![Version](https://img.shields.io/badge/Version-2.2.0-green) ![Python](https://img.shields.io/badge/Python-3.8+-green) ![License](https://img.shields.io/badge/License-MIT-yellow)
+![OCPP Server](https://img.shields.io/badge/OCPP-1.6-blue) ![Version](https://img.shields.io/badge/Version-2.3.1-green) ![Python](https://img.shields.io/badge/Python-3.8+-green) ![License](https://img.shields.io/badge/License-MIT-yellow)
 
-## 🎉 What's New in v2.2.0
+## 🎉 What's New in v2.3.1
 
-### Latest Updates (v2.2.0)
+### Maintenance Release (v2.3.1) - **Bug Fixes & Improvements**
+- **🔧 Firmware & Diagnostics Management**: Remote firmware updates and diagnostic file collection with retry logic
+- **📊 Raw WebSocket Message Feature**: Send direct WebSocket messages for advanced debugging and testing
+- **⚙️ UI Configuration System**: Granular control over interface features via configuration files
+- **🔓 UnlockConnector Command**: Complete connector management functionality with safety checks
+- **📈 Production-Ready Testing**: Comprehensive test suites achieving 90% production readiness success rate
+- **📋 Multi-Select Filter Enhancement**: Advanced log filtering with bulk selection capabilities
+- **🔍 Enhanced Log Management**: Improved filtering, search, and export functionality
+- **📊 Charging Profiles Enhancement**: Advanced scheduling with multiple periods support
+- **🎯 OCPP Compliance Improvements**: Better handling of optional parameters and error responses
+- **🔧 Bug Fixes**: Resolved ReserveNow, ChangeAvailability, and UI interaction issues
+
+### Previous Updates (v2.2.0)
 - **🎨 Enhanced UI Design**: Improved charger list with better spacing, professional styling, and visual hierarchy
 - **📏 Vertical Scrolling**: Fixed-height charger list displays 5 chargers at a time with smooth scrolling
 - **⚖️ Better Scalability**: UI now gracefully handles large numbers of connected chargers (tested with 20+)
 - **🔄 OCPP-Compliant Heartbeats**: Heartbeat intervals now properly follow server response from BootNotification
-- **🧪 Enhanced Testing**: Updated multi-charger testing to support 20 concurrent connections with continuous operation
 
 ### Previous Updates (v2.1.1)
 - **🔧 Status Display Fix**: Fixed charger status display to properly follow StatusNotification messages
-- **⚡ Real-time Status**: Charger status now accurately reflects OCPP StatusNotification (Available, Preparing, Charging, etc.)
-- **🔄 Connection Logic**: Improved status logic to show "Disconnected" only when WebSocket is actually disconnected
-- **🎯 UI Accuracy**: Frontend now correctly displays the actual charger status instead of default values
+- **⚡ Real-time Status**: Charger status now accurately reflects OCPP StatusNotification
 
 ### Previous Updates (v2.1.0)
 - **🔔 TriggerMessage Support**: Enhanced support for firmware and diagnostics status notifications
-- **📊 CSV Export Improvements**: Enhanced CSV download format with proper message flow directions and compact JSON
-- **🛠️ Handler Enhancements**: Added missing message handlers for complete OCPP 1.6 compliance
-- **🔧 Bug Fixes**: Various improvements to message handling and data formatting
+- **📊 CSV Export Improvements**: Enhanced CSV download format with proper message flow directions
 
-### Major Updates from v2.0.0
-- **🔧 Enhanced Stability**: Upgraded to OCPP Python library 2.0.0 for better reliability
-- **🐛 Bug Fixes**: Fixed critical issues with remote commands and data type handling
-- **⚡ Improved Performance**: Better error handling and logging throughout the system
-- **🔄 Dependency Updates**: All packages updated to latest stable versions
-
-**Note**: This is **OCPP 1.6 Server software version 2.2.0** - it implements the OCPP 1.6 protocol, not OCPP 2.0.1 protocol.
+**Note**: This is **OCPP 1.6 Server software version 2.3.1** - it implements the OCPP 1.6 protocol, not OCPP 2.0.1 protocol.
 
 ## 🚀 Quick Start
 
@@ -149,7 +150,7 @@ The server supports both types of OCPP 1.6 reset operations:
 ## 🔧 File Structure
 
 ```
-OCPP_1.6_Server_v2.2.0/
+OCPP_1.6_Server_v2.3.1/
 ├── setup.bat              # One-time installation script
 ├── start_server.bat        # Start the OCPP server
 ├── demo_charger.bat        # Run demo charger for testing
@@ -159,6 +160,7 @@ OCPP_1.6_Server_v2.2.0/
 ├── backend/               # Server code
 │   ├── main.py           # Main server application
 │   ├── api_routes.py     # REST API endpoints
+│   ├── config.py         # Configuration management
 │   └── ocpp_handler.py   # OCPP protocol handler
 ├── frontend/              # Web interface
 │   ├── templates/        # HTML templates
@@ -237,4 +239,4 @@ This software is provided under the MIT License. See LICENSE file for details.
 
 ---
 
-**© 2025 OCPP 1.6 Server v2.1.0 - Professional EV Charging Management System** 
+**© 2025 OCPP 1.6 Server v2.3.1 - Professional EV Charging Management System** 
